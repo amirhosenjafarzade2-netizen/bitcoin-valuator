@@ -7,18 +7,20 @@ from data_fetch import fetch_history
 # Configure logging
 logging.basicConfig(filename='app.log', level=logging.ERROR, format='%(asctime)s - %(levelname)s - %(message)s')
 
-def calibrate_s2f(history, s2f_intercept=14.6, s2f_slope=0.05):
+def calibrate_s2f(history, s2f_intercept=-1.84, s2f_slope=3.96):
     """
     Calibrate S2F model using historical data or user-provided coefficients.
+    Uses ln(sf) for PlanB's model.
     """
     try:
         if history.empty:
             return [s2f_intercept, s2f_slope]
         stock = history['circulating_supply'] if 'circulating_supply' in history else 19700000
-        flow = 6.25 * 144 * 365
+        flow = history.get('block_reward', 3.125) * history.get('blocks_per_day', 144) * 365
         sf = stock / flow if flow > 0 else 100
+        log_sf = np.log(sf)
         log_price = np.log(history['Close'])
-        coeffs = np.polyfit(sf, log_price, 1)
+        coeffs = np.polyfit(log_sf, log_price, 1)
         return coeffs
     except Exception as e:
         logging.error(f"Error calibrating S2F: {str(e)}")
@@ -27,12 +29,13 @@ def calibrate_s2f(history, s2f_intercept=14.6, s2f_slope=0.05):
 def calculate_valuation(inputs):
     """
     Calculate intrinsic value based on the selected model.
-    Returns a dictionary with relevant metrics.
+    Returns a dictionary with per-BTC metrics.
     """
     model = inputs['model']
     current_price = inputs['current_price']
     mos = inputs['margin_of_safety']
     volatility_adj = inputs['volatility_adj']
+    circulating_supply = inputs['circulating_supply']
     history = fetch_history(period='5y')
     
     try:
@@ -61,7 +64,7 @@ def calculate_valuation(inputs):
         else:
             results = {'intrinsic_value': 0, 'error': 'Unknown model'}
         
-        # Common metrics
+        # Common metrics (per BTC)
         intrinsic_value = results.get('intrinsic_value', 0) * (1 - volatility_adj / 100)
         results['current_price'] = current_price
         results['intrinsic_value'] = max(intrinsic_value, 0) * (1 - mos / 100)
@@ -72,12 +75,12 @@ def calculate_valuation(inputs):
         
         # Model-specific metrics
         results['nvt_ratio'] = inputs['market_cap'] / inputs['transaction_volume'] if inputs['transaction_volume'] > 0 else 50
-        results['mvrv_z_score'] = (inputs['mvrv'] - 1) / 0.5 if inputs['mvrv'] > 0 else 0
+        results['mvrv_z_score'] = (inputs['mvrv'] - 2.0) / 0.5 if inputs['mvrv'] > 0 else 0
         results['sopr_signal'] = 'Buy' if inputs['sopr'] < 1 else 'Sell' if inputs['sopr'] > 1.2 else 'Hold'
         results['puell_signal'] = 'Buy' if inputs['puell_multiple'] < 0.5 else 'Sell' if inputs['puell_multiple'] > 4 else 'Hold'
         results['mining_cost_vs_price'] = (inputs['mining_cost'] - current_price) / current_price * 100 if current_price > 0 else 0
         
-        # All model values
+        # All model values (per BTC)
         all_models = {
             's2f_value': s2f_model(inputs).get('intrinsic_value', 0),
             'metcalfe_value': metcalfe_law(inputs).get('intrinsic_value', 0),
@@ -132,13 +135,13 @@ def s2f_model(inputs):
     stock = inputs['circulating_supply']
     flow = inputs['block_reward'] * inputs['blocks_per_day'] * 365
     sf = stock / flow if flow > 0 else 100
-    intrinsic_value = np.exp(coeffs[0] + coeffs[1] * sf) * (1 - inputs['volatility_adj'] / 100)
+    intrinsic_value = np.exp(coeffs[0] + coeffs[1] * np.log(sf)) / inputs['circulating_supply']
     return {'intrinsic_value': intrinsic_value}
 
 def metcalfe_law(inputs):
     """Metcalfe's Law: value proportional to square of active addresses."""
     n = inputs['active_addresses']
-    intrinsic_value = (n ** 2) * inputs['metcalfe_coeff'] * (1 - inputs['volatility_adj'] / 100)
+    intrinsic_value = (n ** 2) * inputs['metcalfe_coeff'] / inputs['circulating_supply'] * (1 - inputs['volatility_adj'] / 100)
     return {'intrinsic_value': intrinsic_value}
 
 def nvt_model(inputs):
@@ -156,14 +159,14 @@ def pi_cycle(inputs):
     return {'intrinsic_value': intrinsic_value}
 
 def reverse_s2f(inputs):
-    """Reverse S2F: implied growth to reach current price."""
+    """Reverse S2F: implied growth to reach target price."""
     history = fetch_history(period='5y')
     coeffs = calibrate_s2f(history, inputs['s2f_intercept'], inputs['s2f_slope'])
     stock = inputs['circulating_supply']
     flow = inputs['block_reward'] * inputs['blocks_per_day'] * 365
     sf = stock / flow if flow > 0 else 100
-    target_price = inputs['current_price']
-    implied_sf = (np.log(target_price) - coeffs[0]) / coeffs[1]
+    target_price = inputs['current_price'] * 1.5
+    implied_sf = (np.log(target_price * inputs['circulating_supply']) - coeffs[0]) / coeffs[1]
     intrinsic_value = target_price * (1 - inputs['volatility_adj'] / 100)
     return {'intrinsic_value': intrinsic_value, 'implied_sf': implied_sf}
 
@@ -193,10 +196,10 @@ def mayer_multiple(inputs):
 
 def hash_ribbons(inputs, history):
     """Hash Ribbons: Miner capitulation via hash rate MAs."""
-    if history.empty or 'hash-rate' not in history.columns:
+    if history.empty or 'hash_rate' not in history.columns:
         return {'intrinsic_value': inputs['current_price'], 'hash_ribbon_signal': 'Hold'}
-    hash_rate_30d = history['hash-rate'].rolling(30).mean().iloc[-1]
-    hash_rate_60d = history['hash-rate'].rolling(60).mean().iloc[-1]
+    hash_rate_30d = history['hash_rate'].rolling(30).mean().iloc[-1]
+    hash_rate_60d = history['hash_rate'].rolling(60).mean().iloc[-1]
     signal = 'Buy' if hash_rate_30d > hash_rate_60d else 'Sell' if hash_rate_30d < hash_rate_60d * 0.9 else 'Hold'
     adjustment = 1.2 if signal == 'Buy' else 0.8 if signal == 'Sell' else 1.0
     intrinsic_value = inputs['current_price'] * adjustment * (1 - inputs['volatility_adj'] / 100)
@@ -205,7 +208,7 @@ def hash_ribbons(inputs, history):
 def macro_monetary_model(inputs):
     """Macro Monetary Model: Adjusts Metcalfe's base value by inflation and real rates."""
     n = inputs['active_addresses']
-    base_value = (n ** 2) * inputs['metcalfe_coeff']  # Metcalfe's Law as baseline
+    base_value = (n ** 2) * inputs['metcalfe_coeff'] / inputs['circulating_supply']
     inflation_premium = inputs['us_inflation'] / 100 * 0.5  # 50% sensitivity to inflation
     real_rate = inputs['fed_rate'] - inputs['us_inflation']
     rate_discount = max(real_rate / 100, 0)  # No negative discount
