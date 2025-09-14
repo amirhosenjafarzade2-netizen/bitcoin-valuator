@@ -18,21 +18,21 @@ load_dotenv()
 def get_yfinance_ticker(symbol):
     return yf.Ticker(symbol)
 
-@st.cache_data(ttl=300)
-@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
+@st.cache_data(ttl=600)
+@retry(stop=stop_after_attempt(5), wait=wait_exponential(multiplier=1, min=4, max=10))
 def fetch_bitcoin_data(electricity_cost=0.05):
     """
-    Fetch Bitcoin data from various sources.
+    Fetch Bitcoin data from CoinGecko, with CoinMarketCap as fallback.
     electricity_cost: Cost per kWh for mining cost estimation ($/kWh).
     Returns a dictionary with relevant metrics.
     """
     data = {}
+    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
     
-    # CoinGecko for market data
+    # Try CoinGecko first
     try:
         cg_url = "https://api.coingecko.com/api/v3/coins/bitcoin"
-        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36', 'X-API-Key': os.getenv('COINGECKO_API_KEY', '')}
-        cg_response = requests.get(cg_url, headers=headers).json()
+        cg_response = requests.get(cg_url, headers=headers, params={'x_cg_api_key': os.getenv('COINGECKO_API_KEY', '')}).json()
         market_data = cg_response['market_data']
         
         data['current_price'] = market_data['current_price']['usd']
@@ -40,30 +40,48 @@ def fetch_bitcoin_data(electricity_cost=0.05):
         data['total_volume'] = market_data['total_volume']['usd']
         data['circulating_supply'] = market_data['circulating_supply']
         data['total_supply'] = market_data['max_supply'] or 21000000
-        
         community = cg_response['community_data']
         data['social_volume'] = community['reddit_average_posts_48h'] + community['twitter_followers'] / 1000
         up = cg_response['sentiment_votes_up_percentage']
         down = cg_response['sentiment_votes_down_percentage']
         data['sentiment_score'] = (up - down) / 100 if up and down else 0.0
-        
+    
     except Exception as e:
         logging.error(f"Error fetching from CoinGecko: {str(e)}")
-        st.warning("Unable to fetch market data. Using defaults.")
-        data['current_price'] = 60000.0
-        data['market_cap'] = 1.2e12
-        data['total_volume'] = 5e10
-        data['circulating_supply'] = 19700000
-        data['total_supply'] = 21000000
-        data['social_volume'] = 10000
-        data['sentiment_score'] = 0.5
+        st.warning("CoinGecko failed. Trying CoinMarketCap...")
+        
+        # Fallback to CoinMarketCap
+        try:
+            cmc_url = "https://pro-api.coinmarketcap.com/v1/cryptocurrency/quotes/latest"
+            cmc_params = {'symbol': 'BTC', 'convert': 'USD'}
+            cmc_headers = {'X-CMC_PRO_API_KEY': os.getenv('COINMARKETCAP_API_KEY', ''), **headers}
+            cmc_response = requests.get(cmc_url, headers=cmc_headers, params=cmc_params).json()
+            btc_data = cmc_response['data']['BTC']
+            
+            data['current_price'] = btc_data['quote']['USD']['price']
+            data['market_cap'] = btc_data['quote']['USD']['market_cap']
+            data['total_volume'] = btc_data['quote']['USD']['volume_24h']
+            data['circulating_supply'] = btc_data['circulating_supply']
+            data['total_supply'] = btc_data['max_supply'] or 21000000
+            data['social_volume'] = 10000  # No direct equivalent; use default
+            data['sentiment_score'] = 0.5  # No direct equivalent; use default
+            
+        except Exception as e:
+            logging.error(f"Error fetching from CoinMarketCap: {str(e)}")
+            st.warning("Unable to fetch market data. Using defaults.")
+            data['current_price'] = 60000.0
+            data['market_cap'] = 1.2e12
+            data['total_volume'] = 5e10
+            data['circulating_supply'] = 19700000
+            data['total_supply'] = 21000000
+            data['social_volume'] = 10000
+            data['sentiment_score'] = 0.5
     
     # Blockchain.com for on-chain
-    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
+    @retry(stop=stop_after_attempt(5), wait=wait_exponential(multiplier=1, min=4, max=10))
     def get_latest(chart_name, timespan='1days'):
         try:
             url = f"https://api.blockchain.info/charts/{chart_name}?format=json&timespan={timespan}"
-            headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
             response = requests.get(url, headers=headers).json()
             return response['values'][-1]['y']
         except Exception as e:
@@ -83,7 +101,7 @@ def fetch_bitcoin_data(electricity_cost=0.05):
         power_consumption = hash_rate * 1000  # Simplified
         return power_consumption * electricity_cost * 24 * 365 / (6.25 * 144)
     data['mining_cost'] = estimate_mining_cost(data['hash_rate'], electricity_cost)
-    data['electricity_cost'] = electricity_cost  # Store for UI
+    data['electricity_cost'] = electricity_cost
     
     # Next halving
     try:
@@ -175,16 +193,16 @@ def fetch_bitcoin_data(electricity_cost=0.05):
     data['monte_carlo_runs'] = 1000
     data['volatility_adj'] = 30.0
     data['growth_adj'] = 20.0
-    data['s2f_intercept'] = 14.6  # Default S2F intercept
-    data['s2f_slope'] = 0.05      # Default S2F slope
-    data['metcalfe_coeff'] = 0.0001  # Default Metcalfe coefficient
-    data['block_reward'] = 6.25   # Current block reward
-    data['blocks_per_day'] = 144  # Approx blocks per day
+    data['s2f_intercept'] = 14.6
+    data['s2f_slope'] = 0.05
+    data['metcalfe_coeff'] = 0.0001
+    data['block_reward'] = 6.25
+    data['blocks_per_day'] = 144
     
     return data
 
 @st.cache_data(ttl=86400)
-@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
+@retry(stop=stop_after_attempt(5), wait=wait_exponential(multiplier=1, min=4, max=10))
 def fetch_history(period='5y'):
     """
     Fetch historical price and on-chain data for Bitcoin, including hash rate MAs for Hash Ribbons.
