@@ -43,7 +43,13 @@ def validate_inputs(inputs):
         'monte_carlo_runs': (100, 2000),
         'volatility_adj': (0, 50),
         'growth_adj': (0, 50),
-        'beta': (0, float('inf'))
+        'beta': (0, float('inf')),
+        's2f_intercept': (0, 100),
+        's2f_slope': (0, 1),
+        'metcalfe_coeff': (0, 0.01),
+        'electricity_cost': (0, 1),
+        'block_reward': (0, 50),
+        'blocks_per_day': (100, 200)
     }
     
     try:
