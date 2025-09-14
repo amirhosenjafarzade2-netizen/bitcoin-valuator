@@ -8,3 +8,4 @@ yfinance>=0.2.18
 reportlab>=4.0.0
 python-dotenv>=1.0.0
 tenacity>=8.2.0
+fpdf>=1.7.2
