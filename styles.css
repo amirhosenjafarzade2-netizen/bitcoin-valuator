@@ -4,6 +4,11 @@ body {
     color: #333;
 }
 
+body.dark-mode {
+    background-color: #1a1a1a;
+    color: #f0f0f0;
+}
+
 .stTabs [data-baseweb="tab-list"] {
     display: flex;
     flex-direction: row;
@@ -13,6 +18,11 @@ body {
     background-color: #f0f2f6;
     border: 1px solid #e0e0e0;
     box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.stTabs [data-baseweb="tab-list"].dark-mode {
+    background-color: #333;
+    border-color: #555;
 }
 
 .stTabs [data-baseweb="tab"] {
@@ -31,6 +41,10 @@ body {
     background-color: transparent;
 }
 
+.stTabs [data-baseweb="tab"].dark-mode {
+    color: #ff4d4d;
+}
+
 .stTabs [data-baseweb="tab"]:hover {
     color: #b71c1c;
     background-color: #ffebee;
@@ -42,6 +56,12 @@ body {
     box-shadow: inset 0 -2px 0 #d32f2f;
 }
 
+.stTabs [data-baseweb="tab"][aria-selected="true"].dark-mode {
+    color: #ff4d4d;
+    background-color: #444;
+    box-shadow: inset 0 -2px 0 #ff4d4d;
+}
+
 .stButton>button {
     background-color: #d32f2f;
     color: white;
@@ -51,4 +71,12 @@ body {
 
 .stButton>button:hover {
     background-color: #b71c1c;
+}
+
+.stButton>button.dark-mode {
+    background-color: #ff4d4d;
+}
+
+.stButton>button.dark-mode:hover {
+    background-color: #cc0000;
 }
