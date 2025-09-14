@@ -10,7 +10,7 @@ from monte_carlo import run_monte_carlo
 import logging
 
 # Configure logging
-logging.basicConfig(filename='app.log', level=logging.ERROR, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(filename='app.log', level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 st.set_page_config(page_title="Bitcoin Valuation Dashboard", layout="wide", initial_sidebar_state="expanded")
 
@@ -29,6 +29,9 @@ if 'data' not in st.session_state:
     st.session_state.data = {}
 if 'results' not in st.session_state:
     st.session_state.results = {}
+
+# Fetch data
+data = fetch_bitcoin_data(electricity_cost=0.05)
 
 # Dark mode toggle
 dark_mode = st.checkbox("Toggle Dark Mode", value=False)
@@ -66,63 +69,78 @@ with tab1:
             help="Select a model to analyze Bitcoin."
         )
         
+        use_fetched_data = st.checkbox("Use Fetched Data", value=True, help="Use API-fetched data instead of manual inputs")
+        
+        with st.expander("Fetched Data Overview"):
+            st.write("Fetched Metrics (verify correctness):")
+            st.write(f"- Current Price: ${data.get('current_price', 60000.0):.2f}")
+            st.write(f"- Hash Rate: {data.get('hash_rate', 500.0):.2f} EH/s")
+            st.write(f"- Active Addresses: {data.get('active_addresses', 1000000):.0f}")
+            st.write(f"- Transaction Volume: ${data.get('transaction_volume', 1e9):.2e}")
+            st.write(f"- MVRV: {data.get('mvrv', 2.0):.2f}")
+            st.write(f"- SOPR: {data.get('sopr', 1.0):.2f}")
+            st.write(f"- Puell Multiple: {data.get('puell_multiple', 1.0):.2f}")
+            st.write(f"- Realized Cap: ${data.get('realized_cap', 6e11):.2e}")
+            st.write(f"- Mining Cost: ${data.get('mining_cost', 10000.0):.2f}")
+            st.write(f"- US Inflation: {data.get('us_inflation', 3.0):.2f}%")
+            st.write(f"- Fed Rate: {data.get('fed_rate', 5.0):.2f}%")
+            st.write(f"- Gold Price: ${data.get('gold_price', 2000.0):.2f}")
+            st.write(f"- S&P 500 Correlation: {data.get('sp_correlation', 0.5):.2f}")
+            st.write(f"- Fear & Greed: {data.get('fear_greed', 50)}")
+            st.write(f"- RSI: {data.get('rsi', 50.0):.2f}")
+            st.write(f"- 50-Day MA: ${data.get('50_day_ma', 57000.0):.2f}")
+            st.write(f"- 200-Day MA: ${data.get('200_day_ma', 54000.0):.2f}")
+        
         with st.expander("Core Inputs"):
-            desired_return = st.number_input("Desired Return (%)", min_value=0.0, max_value=50.0, value=15.0, help="Expected annual return (0-50%)")
-            current_price = st.number_input("Current Price (USD)", min_value=0.01, value=60000.0, help="Current BTC price in USD")
-            total_supply = st.number_input("Total Supply (BTC)", min_value=0.0, value=21000000.0, help="Maximum BTC supply (default: 21M)")
-            circulating_supply = st.number_input("Circulating Supply (BTC)", min_value=0.0, value=19700000.0, help="Current circulating BTC")
-            next_halving_date = st.date_input("Next Halving Date", value=datetime(2028, 4, 1), help="Estimated date of next halving")
+            current_price = st.number_input("Current Price (USD)", min_value=0.01, value=data.get('current_price', 60000.0) if use_fetched_data else 60000.0, help="Current BTC price in USD")
+            total_supply = st.number_input("Total Supply (BTC)", min_value=0.0, value=data.get('total_supply', 21000000.0) if use_fetched_data else 21000000.0, help="Maximum BTC supply")
+            circulating_supply = st.number_input("Circulating Supply (BTC)", min_value=0.0, value=data.get('circulating_supply', 19700000.0) if use_fetched_data else 19700000.0, help="Current circulating BTC")
+            next_halving_date = st.date_input("Next Halving Date", value=data.get('next_halving_date', datetime(2028, 4, 1)) if use_fetched_data else datetime(2028, 4, 1), help="Estimated date of next halving")
             margin_of_safety = st.number_input("Margin of Safety (%)", min_value=0.0, max_value=100.0, value=25.0, help="Discount for risk (0-100%)")
         
         with st.expander("On-Chain Inputs"):
-            hash_rate = st.number_input("Hash Rate (EH/s)", min_value=0.0, value=500.0, help="Network hash rate")
-            active_addresses = st.number_input("Active Addresses (Daily)", min_value=0.0, value=1000000.0, help="Daily active wallet addresses")
-            transaction_volume = st.number_input("Transaction Volume (USD, Daily)", min_value=0.0, value=1e9, help="Daily USD transaction volume")
-            mvrv = st.number_input("MVRV Ratio", min_value=0.0, value=2.0, help="Market Value to Realized Value")
-            sopr = st.number_input("SOPR", min_value=0.0, value=1.0, help="Spent Output Profit Ratio (~1)")
-            realized_cap = st.number_input("Realized Cap (USD)", min_value=0.0, value=6e11, help="Total value of all BTC at purchase price")
-            puell_multiple = st.number_input("Puell Multiple", min_value=0.0, value=1.0, help="Miners' revenue vs historical avg (0.3-5)")
-            electricity_cost = st.number_input("Electricity Cost ($/kWh)", min_value=0.0, max_value=1.0, value=0.05, help="Cost per kWh for mining cost estimation")
-            block_reward = st.number_input("Block Reward (BTC)", min_value=0.0, max_value=50.0, value=6.25, help="Current block reward per block")
-            blocks_per_day = st.number_input("Blocks Per Day", min_value=100.0, max_value=200.0, value=144.0, help="Approx blocks mined per day")
+            hash_rate = st.number_input("Hash Rate (EH/s)", min_value=0.0, value=data.get('hash_rate', 500.0) if use_fetched_data else 500.0, help="Network hash rate")
+            active_addresses = st.number_input("Active Addresses (Daily)", min_value=0.0, value=data.get('active_addresses', 1000000.0) if use_fetched_data else 1000000.0, help="Daily active wallet addresses")
+            transaction_volume = st.number_input("Transaction Volume (USD, Daily)", min_value=0.0, value=data.get('transaction_volume', 1e9) if use_fetched_data else 1e9, help="Daily USD transaction volume")
+            mvrv = st.number_input("MVRV Ratio", min_value=0.0, value=data.get('mvrv', 2.0) if use_fetched_data else 2.0, help="Market Value to Realized Value")
+            sopr = st.number_input("SOPR", min_value=0.0, value=data.get('sopr', 1.0) if use_fetched_data else 1.0, help="Spent Output Profit Ratio (~1)")
+            realized_cap = st.number_input("Realized Cap (USD)", min_value=0.0, value=data.get('realized_cap', 6e11) if use_fetched_data else 6e11, help="Total value of all BTC at purchase price")
+            puell_multiple = st.number_input("Puell Multiple", min_value=0.0, value=data.get('puell_multiple', 1.0) if use_fetched_data else 1.0, help="Miners' revenue vs historical avg (0.3-5)")
+            electricity_cost = st.number_input("Electricity Cost ($/kWh)", min_value=0.0, max_value=1.0, value=data.get('electricity_cost', 0.05) if use_fetched_data else 0.05, help="Cost per kWh for mining cost estimation")
+            block_reward = st.number_input("Block Reward (BTC)", min_value=0.0, max_value=50.0, value=data.get('block_reward', 6.25) if use_fetched_data else 6.25, help="Current block reward per block")
+            blocks_per_day = st.number_input("Blocks Per Day", min_value=100.0, max_value=200.0, value=data.get('blocks_per_day', 144.0) if use_fetched_data else 144.0, help="Approx blocks mined per day")
         
         with st.expander("Model-Specific Inputs"):
-            s2f_intercept = st.number_input("S2F Intercept", min_value=0.0, max_value=100.0, value=14.6, help="S2F model intercept for log(price) = intercept + slope * S/F")
-            s2f_slope = st.number_input("S2F Slope", min_value=0.0, max_value=1.0, value=0.05, help="S2F model slope for log(price) = intercept + slope * S/F")
-            metcalfe_coeff = st.number_input("Metcalfe Coefficient", min_value=0.0, max_value=0.01, value=0.0001, help="Scaling factor for Metcalfe's Law (value = coeff * addresses^2)")
+            s2f_intercept = st.number_input("S2F Intercept", min_value=0.0, max_value=100.0, value=data.get('s2f_intercept', 14.6) if use_fetched_data else 14.6, help="S2F model intercept")
+            s2f_slope = st.number_input("S2F Slope", min_value=0.0, max_value=1.0, value=data.get('s2f_slope', 0.05) if use_fetched_data else 0.05, help="S2F model slope")
+            metcalfe_coeff = st.number_input("Metcalfe Coefficient", min_value=0.0, max_value=0.01, value=data.get('metcalfe_coeff', 0.0001) if use_fetched_data else 0.0001, help="Scaling factor for Metcalfe's Law")
         
         with st.expander("Sentiment Inputs"):
-            fear_greed = st.number_input("Fear & Greed Index (0-100)", min_value=0, max_value=100, value=50, help="0=Extreme Fear, 100=Extreme Greed")
-            social_volume = st.number_input("Social Volume (Mentions/Day)", min_value=0.0, value=10000.0, help="Social media mentions (X, Reddit)")
-            sentiment_score = st.number_input("Sentiment Score (-1 to 1)", min_value=-1.0, max_value=1.0, value=0.5, help="Positive=Bullish, Negative=Bearish")
+            fear_greed = st.number_input("Fear & Greed Index (0-100)", min_value=0, max_value=100, value=data.get('fear_greed', 50) if use_fetched_data else 50, help="0=Extreme Fear, 100=Extreme Greed")
+            social_volume = st.number_input("Social Volume (Mentions/Day)", min_value=0.0, value=data.get('social_volume', 10000.0) if use_fetched_data else 10000.0, help="Social media mentions")
+            sentiment_score = st.number_input("Sentiment Score (-1 to 1)", min_value=-1.0, max_value=1.0, value=data.get('sentiment_score', 0.5) if use_fetched_data else 0.5, help="Positive=Bullish, Negative=Bearish")
         
         with st.expander("Macro Inputs"):
-            us_inflation = st.number_input("US Inflation Rate (%)", min_value=0.0, max_value=50.0, value=3.0, help="Annual US inflation rate")
-            fed_rate = st.number_input("Fed Interest Rate (%)", min_value=0.0, max_value=50.0, value=5.0, help="Federal Reserve interest rate")
-            sp_correlation = st.number_input("S&P 500 Correlation (0-1)", min_value=0.0, max_value=1.0, value=0.5, help="BTC-S&P 500 correlation")
-            gold_price = st.number_input("Gold Price (USD/oz)", min_value=0.0, value=2000.0, help="Gold price for comparison")
+            us_inflation = st.number_input("US Inflation Rate (%)", min_value=0.0, max_value=50.0, value=data.get('us_inflation', 3.0) if use_fetched_data else 3.0, help="Annual US inflation rate")
+            fed_rate = st.number_input("Fed Interest Rate (%)", min_value=0.0, max_value=50.0, value=data.get('fed_rate', 5.0) if use_fetched_data else 5.0, help="Federal Reserve interest rate")
+            sp_correlation = st.number_input("S&P 500 Correlation (0-1)", min_value=0.0, max_value=1.0, value=data.get('sp_correlation', 0.5) if use_fetched_data else 0.5, help="BTC-S&P 500 correlation")
+            gold_price = st.number_input("Gold Price (USD/oz)", min_value=0.0, value=data.get('gold_price', 2000.0) if use_fetched_data else 2000.0, help="Gold price for comparison")
         
         with st.expander("Technical Inputs"):
-            rsi = st.number_input("RSI (14-day)", min_value=0.0, max_value=100.0, value=50.0, help="Overbought >70, Oversold <30")
-            ma_50 = st.number_input("50-Day MA", min_value=0.0, value=57000.0, help="50-day moving average")
-            ma_200 = st.number_input("200-Day MA", min_value=0.0, value=54000.0, help="200-day moving average")
+            rsi = st.number_input("RSI (14-day)", min_value=0.0, max_value=100.0, value=data.get('rsi', 50.0) if use_fetched_data else 50.0, help="Overbought >70, Oversold <30")
+            ma_50 = st.number_input("50-Day MA", min_value=0.0, value=data.get('50_day_ma', 57000.0) if use_fetched_data else 57000.0, help="50-day moving average")
+            ma_200 = st.number_input("200-Day MA", min_value=0.0, value=data.get('200_day_ma', 54000.0) if use_fetched_data else 54000.0, help="200-day moving average")
         
         with st.expander("Monte Carlo Settings"):
-            monte_carlo_runs = st.number_input("Number of Runs", min_value=100, max_value=2000, value=1000, help="100-2000 runs")
-            volatility_adj = st.number_input("Volatility Adjustment Range (±%)", min_value=0.0, max_value=50.0, value=30.0, help="Volatility variation")
-            growth_adj = st.number_input("Growth Adjustment Range (±%)", min_value=0.0, max_value=50.0, value=20.0, help="Growth rate variation")
+            monte_carlo_runs = st.number_input("Number of Runs", min_value=100, max_value=2000, value=data.get('monte_carlo_runs', 1000) if use_fetched_data else 1000, help="100-2000 runs")
+            volatility_adj = st.number_input("Volatility Adjustment Range (±%)", min_value=0.0, max_value=50.0, value=data.get('volatility_adj', 30.0) if use_fetched_data else 30.0, help="Volatility variation")
+            growth_adj = st.number_input("Growth Adjustment Range (±%)", min_value=0.0, max_value=50.0, value=data.get('growth_adj', 20.0) if use_fetched_data else 20.0, help="Growth rate variation")
         
-        beta = st.number_input("Beta (vs. Market)", min_value=0.0, value=1.5, help="BTC's market risk vs S&P 500")
+        beta = st.number_input("Beta (vs. Market)", min_value=0.0, value=data.get('beta', 1.5) if use_fetched_data else 1.5, help="BTC's market risk vs S&P 500")
         
-        data = fetch_bitcoin_data(electricity_cost)
-        data.update({
-            's2f_intercept': s2f_intercept,
-            's2f_slope': s2f_slope,
-            'metcalfe_coeff': metcalfe_coeff,
-            'block_reward': block_reward,
-            'blocks_per_day': blocks_per_day,
-            'electricity_cost': electricity_cost
-        })
+        if st.button("Clear Cache"):
+            st.cache_data.clear()
+            st.rerun()
         
         calculate = st.button("Calculate")
         add_to_portfolio = st.button("Add to Portfolio")
