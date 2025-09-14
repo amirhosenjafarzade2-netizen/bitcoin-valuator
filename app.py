@@ -1,11 +1,16 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime
+from concurrent.futures import ThreadPoolExecutor
 from data_fetch import fetch_bitcoin_data, fetch_history
 from valuation_models import calculate_valuation
-from visualizations import plot_heatmap, plot_monte_carlo, plot_model_comparison, plot_onchain_metrics, plot_sentiment_analysis
+from visualizations import plot_heatmap, plot_monte_carlo, plot_model_comparison, plot_onchain_metrics, plot_sentiment_analysis, plot_price_history, plot_macro_correlations
 from utils import validate_inputs, export_portfolio, generate_pdf_report
 from monte_carlo import run_monte_carlo
+import logging
+
+# Configure logging
+logging.basicConfig(filename='app.log', level=logging.ERROR, format='%(asctime)s - %(levelname)s - %(message)s')
 
 st.set_page_config(page_title="Bitcoin Valuation Dashboard", layout="wide", initial_sidebar_state="expanded")
 
@@ -14,6 +19,7 @@ try:
     with open("styles.css") as f:
         st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
 except FileNotFoundError:
+    logging.error("styles.css not found")
     st.warning("styles.css not found. Using default styling.")
 
 # Initialize session state
@@ -23,6 +29,10 @@ if 'data' not in st.session_state:
     st.session_state.data = {}
 if 'results' not in st.session_state:
     st.session_state.results = {}
+
+# Dark mode toggle
+dark_mode = st.checkbox("Toggle Dark Mode", value=False)
+st.markdown(f'<body class="{"dark-mode" if dark_mode else ""}">', unsafe_allow_html=True)
 
 st.title("Bitcoin Valuation Dashboard")
 st.markdown("Analyze Bitcoin using models like Stock-to-Flow, Metcalfe's Law, and NVT. *Not financial advice. Verify all inputs.*")
@@ -52,45 +62,45 @@ with tab1:
         data = fetch_bitcoin_data()
         
         with st.expander("Core Inputs"):
-            desired_return = st.number_input("Desired Return (%)", min_value=0.0, max_value=50.0, value=data['desired_return'])
-            current_price = st.number_input("Current Price (USD)", min_value=0.01, value=data['current_price'])
-            total_supply = st.number_input("Total Supply (BTC)", min_value=0.0, value=data['total_supply'])
-            circulating_supply = st.number_input("Circulating Supply (BTC)", min_value=0.0, value=data['circulating_supply'])
-            next_halving_date = st.date_input("Next Halving Date", value=data['next_halving_date'])
-            margin_of_safety = st.number_input("Margin of Safety (%)", min_value=0.0, max_value=100.0, value=data['margin_of_safety'])
+            desired_return = st.number_input("Desired Return (%)", min_value=0.0, max_value=50.0, value=data['desired_return'], help="Expected annual return (0-50%)")
+            current_price = st.number_input("Current Price (USD)", min_value=0.01, value=data['current_price'], help="Current BTC price in USD")
+            total_supply = st.number_input("Total Supply (BTC)", min_value=0.0, value=data['total_supply'], help="Maximum BTC supply (default: 21M)")
+            circulating_supply = st.number_input("Circulating Supply (BTC)", min_value=0.0, value=data['circulating_supply'], help="Current circulating BTC")
+            next_halving_date = st.date_input("Next Halving Date", value=data['next_halving_date'], help="Estimated date of next halving")
+            margin_of_safety = st.number_input("Margin of Safety (%)", min_value=0.0, max_value=100.0, value=data['margin_of_safety'], help="Discount for risk (0-100%)")
         
         with st.expander("On-Chain Inputs"):
-            hash_rate = st.number_input("Hash Rate (EH/s)", min_value=0.0, value=data['hash_rate'])
-            active_addresses = st.number_input("Active addresses (Daily)", min_value=0.0, value=data['active_addresses'])
-            transaction_volume = st.number_input("Transaction Volume (USD, Daily)", min_value=0.0, value=data['transaction_volume'])
-            mvrv = st.number_input("MVRV Ratio", min_value=0.0, value=data['mvrv'])
-            sopr = st.number_input("SOPR", min_value=0.0, value=data['sopr'])
-            realized_cap = st.number_input("Realized Cap (USD)", min_value=0.0, value=data['realized_cap'])
-            puell_multiple = st.number_input("Puell Multiple", min_value=0.0, value=data['puell_multiple'])
-            mining_cost = st.number_input("Estimated Mining Cost (USD/BTC)", min_value=0.0, value=data['mining_cost'])
+            hash_rate = st.number_input("Hash Rate (EH/s)", min_value=0.0, value=data['hash_rate'], help="Network hash rate")
+            active_addresses = st.number_input("Active Addresses (Daily)", min_value=0.0, value=data['active_addresses'], help="Daily active wallet addresses")
+            transaction_volume = st.number_input("Transaction Volume (USD, Daily)", min_value=0.0, value=data['transaction_volume'], help="Daily USD transaction volume")
+            mvrv = st.number_input("MVRV Ratio", min_value=0.0, value=data['mvrv'], help="Market Value to Realized Value")
+            sopr = st.number_input("SOPR", min_value=0.0, value=data['sopr'], help="Spent Output Profit Ratio (~1)")
+            realized_cap = st.number_input("Realized Cap (USD)", min_value=0.0, value=data['realized_cap'], help="Total value of all BTC at purchase price")
+            puell_multiple = st.number_input("Puell Multiple", min_value=0.0, value=data['puell_multiple'], help="Miners' revenue vs historical avg (0.3-5)")
+            mining_cost = st.number_input("Estimated Mining Cost (USD/BTC)", min_value=0.0, value=data['mining_cost'], help="Cost to mine one BTC")
         
         with st.expander("Sentiment Inputs"):
-            fear_greed = st.number_input("Fear & Greed Index (0-100)", min_value=0, max_value=100, value=int(data['fear_greed']))
-            social_volume = st.number_input("Social Volume (Mentions/Day)", min_value=0.0, value=data['social_volume'])
-            sentiment_score = st.number_input("Sentiment Score (-1 to 1)", min_value=-1.0, max_value=1.0, value=data['sentiment_score'])
+            fear_greed = st.number_input("Fear & Greed Index (0-100)", min_value=0, max_value=100, value=int(data['fear_greed']), help="0=Extreme Fear, 100=Extreme Greed")
+            social_volume = st.number_input("Social Volume (Mentions/Day)", min_value=0.0, value=data['social_volume'], help="Social media mentions (X, Reddit)")
+            sentiment_score = st.number_input("Sentiment Score (-1 to 1)", min_value=-1.0, max_value=1.0, value=data['sentiment_score'], help="Positive=Bullish, Negative=Bearish")
         
         with st.expander("Macro Inputs"):
-            us_inflation = st.number_input("US Inflation Rate (%)", min_value=0.0, max_value=50.0, value=data['us_inflation'])
-            fed_rate = st.number_input("Fed Interest Rate (%)", min_value=0.0, max_value=50.0, value=data['fed_rate'])
-            sp_correlation = st.number_input("S&P 500 Correlation (0-1)", min_value=0.0, max_value=1.0, value=data['sp_correlation'])
-            gold_price = st.number_input("Gold Price (USD/oz)", min_value=0.0, value=data['gold_price'])
+            us_inflation = st.number_input("US Inflation Rate (%)", min_value=0.0, max_value=50.0, value=data['us_inflation'], help="Annual US inflation rate")
+            fed_rate = st.number_input("Fed Interest Rate (%)", min_value=0.0, max_value=50.0, value=data['fed_rate'], help="Federal Reserve interest rate")
+            sp_correlation = st.number_input("S&P 500 Correlation (0-1)", min_value=0.0, max_value=1.0, value=data['sp_correlation'], help="BTC-S&P 500 correlation")
+            gold_price = st.number_input("Gold Price (USD/oz)", min_value=0.0, value=data['gold_price'], help="Gold price for comparison")
         
         with st.expander("Technical Inputs"):
-            rsi = st.number_input("RSI (14-day)", min_value=0.0, max_value=100.0, value=data['rsi'])
-            ma_50 = st.number_input("50-Day MA", min_value=0.0, value=data['50_day_ma'])
-            ma_200 = st.number_input("200-Day MA", min_value=0.0, value=data['200_day_ma'])
+            rsi = st.number_input("RSI (14-day)", min_value=0.0, max_value=100.0, value=data['rsi'], help="Overbought >70, Oversold <30")
+            ma_50 = st.number_input("50-Day MA", min_value=0.0, value=data['50_day_ma'], help="50-day moving average")
+            ma_200 = st.number_input("200-Day MA", min_value=0.0, value=data['200_day_ma'], help="200-day moving average")
         
         with st.expander("Monte Carlo Settings"):
-            monte_carlo_runs = st.number_input("Number of Runs", min_value=100, max_value=2000, value=data['monte_carlo_runs'])
-            volatility_adj = st.number_input("Volatility Adjustment Range (±%)", min_value=0.0, max_value=50.0, value=data['volatility_adj'])
-            growth_adj = st.number_input("Growth Adjustment Range (±%)", min_value=0.0, max_value=50.0, value=data['growth_adj'])
+            monte_carlo_runs = st.number_input("Number of Runs", min_value=100, max_value=2000, value=data['monte_carlo_runs'], help="100-2000 runs")
+            volatility_adj = st.number_input("Volatility Adjustment Range (±%)", min_value=0.0, max_value=50.0, value=data['volatility_adj'], help="Volatility variation")
+            growth_adj = st.number_input("Growth Adjustment Range (±%)", min_value=0.0, max_value=50.0, value=data['growth_adj'], help="Growth rate variation")
         
-        beta = st.number_input("Beta (vs. Market)", min_value=0.0, value=data['beta'])
+        beta = st.number_input("Beta (vs. Market)", min_value=0.0, value=data['beta'], help="BTC's market risk vs S&P 500")
         
         calculate = st.button("Calculate")
         add_to_portfolio = st.button("Add to Portfolio")
@@ -102,62 +112,63 @@ with tab1:
     with col_left:
         st.header("Valuation Dashboard")
         if calculate:
-            inputs = {
-                'model': model,
-                'current_price': current_price,
-                'total_supply': total_supply,
-                'circulating_supply': circulating_supply,
-                'next_halving_date': next_halving_date,
-                'margin_of_safety': margin_of_safety,
-                'hash_rate': hash_rate,
-                'active_addresses': active_addresses,
-                'transaction_volume': transaction_volume,
-                'mvrv': mvrv,
-                'sopr': sopr,
-                'realized_cap': realized_cap,
-                'puell_multiple': puell_multiple,
-                'mining_cost': mining_cost,
-                'fear_greed': fear_greed,
-                'social_volume': social_volume,
-                'sentiment_score': sentiment_score,
-                'us_inflation': us_inflation,
-                'fed_rate': fed_rate,
-                'sp_correlation': sp_correlation,
-                'gold_price': gold_price,
-                'rsi': rsi,
-                '50_day_ma': ma_50,
-                '200_day_ma': ma_200,
-                'desired_return': desired_return,
-                'monte_carlo_runs': monte_carlo_runs,
-                'volatility_adj': volatility_adj,
-                'growth_adj': growth_adj,
-                'beta': beta,
-                'market_cap': current_price * circulating_supply
-            }
-            
-            if validate_inputs(inputs):
-                results = calculate_valuation(inputs)
-                st.session_state.results = results
-                st.session_state.data = inputs
+            with st.spinner("Calculating valuation..."):
+                inputs = {
+                    'model': model,
+                    'current_price': current_price,
+                    'total_supply': total_supply,
+                    'circulating_supply': circulating_supply,
+                    'next_halving_date': next_halving_date,
+                    'margin_of_safety': margin_of_safety,
+                    'hash_rate': hash_rate,
+                    'active_addresses': active_addresses,
+                    'transaction_volume': transaction_volume,
+                    'mvrv': mvrv,
+                    'sopr': sopr,
+                    'realized_cap': realized_cap,
+                    'puell_multiple': puell_multiple,
+                    'mining_cost': mining_cost,
+                    'fear_greed': fear_greed,
+                    'social_volume': social_volume,
+                    'sentiment_score': sentiment_score,
+                    'us_inflation': us_inflation,
+                    'fed_rate': fed_rate,
+                    'sp_correlation': sp_correlation,
+                    'gold_price': gold_price,
+                    'rsi': rsi,
+                    '50_day_ma': ma_50,
+                    '200_day_ma': ma_200,
+                    'desired_return': desired_return,
+                    'monte_carlo_runs': monte_carlo_runs,
+                    'volatility_adj': volatility_adj,
+                    'growth_adj': growth_adj,
+                    'beta': beta,
+                    'market_cap': current_price * circulating_supply
+                }
                 
-                st.metric("Score", f"{results.get('score', 0)}/100")
-                st.metric("Model", results.get('model', '-'))
-                st.metric("Current Price", f"${results.get('current_price', 0):.2f}")
-                st.metric("Intrinsic Value (Today)", f"${results.get('intrinsic_value', 0):.2f}")
-                st.metric("Safe Buy Price (after MOS)", f"${results.get('safe_buy_price', 0):.2f}")
-                st.metric("Undervaluation %", f"{results.get('undervaluation', 0):.2f}%")
-                st.metric("NVT Ratio", f"{results.get('nvt_ratio', 0):.2f}")
-                st.metric("MVRV Z-Score", f"{results.get('mvrv_z_score', 0):.2f}")
-                st.metric("SOPR Signal", results.get('sopr_signal', '-'))
-                st.metric("Puell Multiple Signal", results.get('puell_signal', '-'))
-                st.metric("Mining Cost vs Price", f"{results.get('mining_cost_vs_price', 0):.2f}%")
-                st.metric("Overall Score", f"{results.get('score', 0)}/100")
-                st.metric("Verdict", results.get('verdict', '-'))
-                st.metric("S2F Projected Value", f"${results.get('s2f_value', 0):.2f}")
-                st.metric("Metcalfe Value", f"${results.get('metcalfe_value', 0):.2f}")
-                st.metric("NVT Value", f"${results.get('nvt_value', 0):.2f}")
-                st.metric("Pi Cycle Value", f"${results.get('pi_cycle_value', 0):.2f}")
-                st.metric("Reverse S2F Value", f"${results.get('reverse_s2f_value', 0):.2f}")
+                if validate_inputs(inputs):
+                    results = calculate_valuation(inputs)
+                    st.session_state.results = results
+                    st.session_state.data = inputs
+                    
+                    st.metric("Score", f"{results.get('score', 0)}/100")
+                    st.metric("Model", results.get('model', '-'))
+                    st.metric("Current Price", f"${results.get('current_price', 0):.2f}")
+                    st.metric("Intrinsic Value (Today)", f"${results.get('intrinsic_value', 0):.2f}")
+                    st.metric("Safe Buy Price (after MOS)", f"${results.get('safe_buy_price', 0):.2f}")
+                    st.metric("Undervaluation %", f"{results.get('undervaluation', 0):.2f}%")
+                    st.metric("NVT Ratio", f"{results.get('nvt_ratio', 0):.2f}")
+                    st.metric("MVRV Z-Score", f"{results.get('mvrv_z_score', 0):.2f}")
+                    st.metric("SOPR Signal", results.get('sopr_signal', '-'))
+                    st.metric("Puell Multiple Signal", results.get('puell_signal', '-'))
+                    st.metric("Mining Cost vs Price", f"{results.get('mining_cost_vs_price', 0):.2f}%")
+                    st.metric("Overall Score", f"{results.get('score', 0)}/100")
+                    st.metric("Verdict", results.get('verdict', '-'))
+                    st.metric("S2F Projected Value", f"${results.get('s2f_value', 0):.2f}")
+                    st.metric("Metcalfe Value", f"${results.get('metcalfe_value', 0):.2f}")
+                    st.metric("NVT Value", f"${results.get('nvt_value', 0):.2f}")
+                    st.metric("Pi Cycle Value", f"${results.get('pi_cycle_value', 0):.2f}")
+                    st.metric("Reverse S2F Value", f"${results.get('reverse_s2f_value', 0):.2f}")
     
     with col_right:
         st.header("Portfolio Overview")
@@ -182,18 +193,30 @@ with tab1:
             export_portfolio(st.session_state.portfolio)
         
         if download_report and 'results' in st.session_state:
-            pdf = generate_pdf_report(st.session_state.results, st.session_state.portfolio)
-            st.download_button(
-                label="Download PDF Report",
-                data=pdf,
-                file_name="bitcoin_valuation_report.pdf",
-                mime="application/pdf"
-            )
+            model_comp = pd.DataFrame({
+                'Model': ['S2F', 'Metcalfe', 'NVT', 'Pi Cycle', 'Reverse S2F'],
+                'Intrinsic Value': [
+                    st.session_state.results.get('s2f_value', 0),
+                    st.session_state.results.get('metcalfe_value', 0),
+                    st.session_state.results.get('nvt_value', 0),
+                    st.session_state.results.get('pi_cycle_value', 0),
+                    st.session_state.results.get('reverse_s2f_value', 0)
+                ]
+            })
+            model_comp_fig = plot_model_comparison(model_comp)
+            pdf = generate_pdf_report(st.session_state.results, st.session_state.portfolio, model_comp_fig)
+            if pdf:
+                st.download_button(
+                    label="Download PDF Report",
+                    data=pdf,
+                    file_name="bitcoin_valuation_report.pdf",
+                    mime="application/pdf"
+                )
         
         st.header("Scenario Analysis")
         with st.expander("Adjust Scenarios"):
-            bull_adj = st.slider("Bull Case Adjustment (%)", -50.0, 50.0, 20.0)
-            bear_adj = st.slider("Bear Case Adjustment (%)", -50.0, 50.0, -20.0)
+            bull_adj = st.slider("Bull Case Adjustment (%)", -50.0, 50.0, 20.0, help="Adjust intrinsic value for bullish scenario")
+            bear_adj = st.slider("Bear Case Adjustment (%)", -50.0, 50.0, -20.0, help="Adjust intrinsic value for bearish scenario")
         scenarios = pd.DataFrame({
             'Scenario': ['Base Case', 'Bull Case', 'Bear Case'],
             'Intrinsic Value': [
@@ -212,16 +235,20 @@ with tab1:
         st.header("Sensitivity Analysis (Heatmap)")
         if 'results' in st.session_state:
             heatmap = plot_heatmap(st.session_state.results.get('intrinsic_value', 0), volatility_adj, growth_adj)
-            st.plotly_chart(heatmap, use_container_width=True)
+            if heatmap:
+                st.plotly_chart(heatmap, use_container_width=True)
         
         st.header("Monte Carlo Simulation")
         if 'results' in st.session_state:
-            mc_results = run_monte_carlo(st.session_state.data, monte_carlo_runs, volatility_adj, growth_adj)
+            with st.spinner("Running Monte Carlo simulation..."):
+                with ThreadPoolExecutor() as executor:
+                    mc_results = executor.submit(run_monte_carlo, st.session_state.data, monte_carlo_runs, volatility_adj, growth_adj).result()
             st.metric("Average Intrinsic Value", f"${mc_results.get('avg_value', 0):.2f}")
             st.metric("Std Dev", f"${mc_results.get('std_dev', 0):.2f}")
             st.metric("Probability Undervalued (> Current Price)", f"{mc_results.get('prob_undervalued', 0):.2f}%")
             mc_plot = plot_monte_carlo(mc_results)
-            st.plotly_chart(mc_plot, use_container_width=True)
+            if mc_plot:
+                st.plotly_chart(mc_plot, use_container_width=True)
         
         st.header("Model Comparison")
         if 'results' in st.session_state:
@@ -236,12 +263,17 @@ with tab1:
                 ]
             })
             comp_plot = plot_model_comparison(model_comp)
-            st.plotly_chart(comp_plot, use_container_width=True)
+            if comp_plot:
+                st.plotly_chart(comp_plot, use_container_width=True)
 
 with tab2:
     st.header("On-Chain & Sentiment Analysis")
     history = fetch_history()
     if not history.empty:
+        price_plot = plot_price_history(history)
+        if price_plot:
+            st.plotly_chart(price_plot, use_container_width=True)
+        
         onchain_plot = plot_onchain_metrics(st.session_state.data, history)
         if onchain_plot:
             st.plotly_chart(onchain_plot, use_container_width=True)
@@ -249,6 +281,10 @@ with tab2:
         sentiment_plot = plot_sentiment_analysis(st.session_state.data, history)
         if sentiment_plot:
             st.plotly_chart(sentiment_plot, use_container_width=True)
+        
+        macro_plot = plot_macro_correlations(st.session_state.data, history)
+        if macro_plot:
+            st.plotly_chart(macro_plot, use_container_width=True)
     
 st.markdown("---")
 st.markdown("*Disclaimer: This tool is for informational purposes only and not financial advice.*")
