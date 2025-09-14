@@ -125,3 +125,28 @@ def validate_inputs(inputs):
         errors.append("Electricity cost cannot be negative")
     
     return len(errors) == 0, errors
+
+def export_portfolio(portfolio):
+    try:
+        portfolio.to_csv("portfolio_export.csv", index=False)
+    except Exception as e:
+        raise Exception(f"Failed to export portfolio: {str(e)}")
+
+def generate_pdf_report(results, portfolio, model_comp_fig):
+    try:
+        from reportlab.lib.pagesizes import letter
+        from reportlab.pdfgen import canvas
+        from io import BytesIO
+        buffer = BytesIO()
+        c = canvas.Canvas(buffer, pagesize=letter)
+        c.drawString(100, 750, "Bitcoin Valuation Report")
+        c.drawString(100, 730, f"Model: {results.get('model', '-')}")
+        c.drawString(100, 710, f"Intrinsic Value: ${results.get('intrinsic_value', 0):.2f}")
+        c.drawString(100, 690, f"Undervaluation: {results.get('undervaluation', 0):.2f}%")
+        c.drawString(100, 670, f"Verdict: {results.get('verdict', '-')}")
+        c.showPage()
+        c.save()
+        buffer.seek(0)
+        return buffer.getvalue()
+    except Exception as e:
+        raise Exception(f"Failed to generate PDF report: {str(e)}")
