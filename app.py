@@ -2,11 +2,15 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor
-from data_fetch import fetch_bitcoin_data, fetch_history
-from valuation_models import calculate_valuation
-from visualizations import plot_heatmap, plot_monte_carlo, plot_model_comparison, plot_onchain_metrics, plot_sentiment_analysis, plot_price_history, plot_macro_correlations
-from utils import validate_inputs, export_portfolio, generate_pdf_report
-from monte_carlo import run_monte_carlo
+try:
+    from data_fetch import fetch_bitcoin_data, fetch_history
+    from valuation_models import calculate_valuation
+    from visualizations import plot_heatmap, plot_monte_carlo, plot_model_comparison, plot_onchain_metrics, plot_sentiment_analysis, plot_price_history, plot_macro_correlations
+    from utils import validate_inputs, export_portfolio, generate_pdf_report
+    from monte_carlo import run_monte_carlo
+except ImportError as e:
+    st.error(f"Failed to import modules: {str(e)}. Ensure all required files (e.g., utils.py) are in the project directory.")
+    st.stop()
 import logging
 
 # Configure logging
@@ -31,8 +35,24 @@ if 'results' not in st.session_state:
     st.session_state.results = {}
 
 # Fetch data
-data = fetch_bitcoin_data(electricity_cost=0.05)
-logging.info(f"Fetched data: {data}")
+try:
+    data = fetch_bitcoin_data(electricity_cost=0.05)
+    logging.info(f"Fetched data: {data}")
+except Exception as e:
+    st.error(f"Failed to fetch data: {str(e)}. Using default values.")
+    logging.error(f"Data fetch error: {str(e)}")
+    data = {
+        'current_price': 60000.0, 'total_supply': 21000000.0, 'circulating_supply': 19700000.0,
+        'next_halving_date': datetime(2028, 4, 1), 'margin_of_safety': 25.0, 'hash_rate': 500.0,
+        'active_addresses': 1000000.0, 'transaction_volume': 1e9, 'mvrv': 2.0, 'sopr': 1.0,
+        'realized_cap': 6e11, 'puell_multiple': 1.0, 'mining_cost': 10000.0, 'fear_greed': 50,
+        'social_volume': 10000.0, 'sentiment_score': 0.5, 'us_inflation': 3.0, 'fed_rate': 5.0,
+        'sp_correlation': 0.5, 'gold_price': 2000.0, 'rsi': 50.0, '50_day_ma': 57000.0,
+        '200_day_ma': 54000.0, 'desired_return': 15.0, 'monte_carlo_runs': 1000,
+        'volatility_adj': 30.0, 'growth_adj': 20.0, 'beta': 1.5, 's2f_intercept': 14.6,
+        's2f_slope': 0.05, 'metcalfe_coeff': 0.0001, 'block_reward': 3.125, 'blocks_per_day': 144.0,
+        'electricity_cost': 0.05
+    }
 
 st.title("Bitcoin Valuation Dashboard")
 st.markdown("Analyze Bitcoin using models like Stock-to-Flow, Metcalfe's Law, and NVT. *Not financial advice. Verify all inputs.*")
@@ -115,7 +135,7 @@ with tab1:
             active_addresses_fetched = float(data.get('active_addresses', 1000000.0))
             st.write(f"Fetched Active Addresses: {active_addresses_fetched:.0f} (Blockchain.com, expect 800K-1M)")
             if active_addresses_fetched < 500000 or active_addresses_fetched > 1500000:
-                st.warning("Active addresses seem unusual. Verify and edit if needed.")
+                st.warning("Active addresses seems unusual. Verify and edit if needed.")
             active_addresses = st.number_input("Active Addresses (Daily)", min_value=0.0, value=active_addresses_fetched if use_fetched_data else 1000000.0, help="Daily active wallet addresses (Blockchain.com)")
             
             transaction_volume_fetched = float(data.get('transaction_volume', 1e9))
@@ -387,34 +407,41 @@ with tab1:
         st.dataframe(st.session_state.portfolio, use_container_width=True)
         
         if export:
-            export_portfolio(st.session_state.portfolio)
+            try:
+                export_portfolio(st.session_state.portfolio)
+                st.success("Portfolio exported to portfolio_export.csv")
+            except Exception as e:
+                st.error(f"Export failed: {str(e)}")
         
         if download_report and 'results' in st.session_state and st.session_state.results:
-            model_comp = pd.DataFrame({
-                'Model': ['S2F', 'Metcalfe', 'NVT', 'Pi Cycle', 'Reverse S2F', 'MSC', 'Energy', 'RVMR', 'Mayer', 'Hash Ribbons', 'Macro Monetary'],
-                'Intrinsic Value': [
-                    st.session_state.results.get('s2f_value', 0),
-                    st.session_state.results.get('metcalfe_value', 0),
-                    st.session_state.results.get('nvt_value', 0),
-                    st.session_state.results.get('pi_cycle_value', 0),
-                    st.session_state.results.get('reverse_s2f_value', 0),
-                    st.session_state.results.get('msc_value', 0),
-                    st.session_state.results.get('energy_value', 0),
-                    st.session_state.results.get('rvmr_value', 0),
-                    st.session_state.results.get('mayer_multiple_value', 0),
-                    st.session_state.results.get('hash_ribbons_value', 0),
-                    st.session_state.results.get('macro_monetary_value', 0)
-                ]
-            })
-            model_comp_fig = plot_model_comparison(model_comp)
-            pdf = generate_pdf_report(st.session_state.results, st.session_state.portfolio, model_comp_fig)
-            if pdf:
-                st.download_button(
-                    label="Download PDF Report",
-                    data=pdf,
-                    file_name="bitcoin_valuation_report.pdf",
-                    mime="application/pdf"
-                )
+            try:
+                model_comp = pd.DataFrame({
+                    'Model': ['S2F', 'Metcalfe', 'NVT', 'Pi Cycle', 'Reverse S2F', 'MSC', 'Energy', 'RVMR', 'Mayer', 'Hash Ribbons', 'Macro Monetary'],
+                    'Intrinsic Value': [
+                        st.session_state.results.get('s2f_value', 0),
+                        st.session_state.results.get('metcalfe_value', 0),
+                        st.session_state.results.get('nvt_value', 0),
+                        st.session_state.results.get('pi_cycle_value', 0),
+                        st.session_state.results.get('reverse_s2f_value', 0),
+                        st.session_state.results.get('msc_value', 0),
+                        st.session_state.results.get('energy_value', 0),
+                        st.session_state.results.get('rvmr_value', 0),
+                        st.session_state.results.get('mayer_multiple_value', 0),
+                        st.session_state.results.get('hash_ribbons_value', 0),
+                        st.session_state.results.get('macro_monetary_value', 0)
+                    ]
+                })
+                model_comp_fig = plot_model_comparison(model_comp)
+                pdf = generate_pdf_report(st.session_state.results, st.session_state.portfolio, model_comp_fig)
+                if pdf:
+                    st.download_button(
+                        label="Download PDF Report",
+                        data=pdf,
+                        file_name="bitcoin_valuation_report.pdf",
+                        mime="application/pdf"
+                    )
+            except Exception as e:
+                st.error(f"Report generation failed: {str(e)}")
         
         st.header("Scenario Analysis")
         with st.expander("Adjust Scenarios"):
@@ -437,63 +464,75 @@ with tab1:
         
         st.header("Sensitivity Analysis (Heatmap)")
         if 'results' in st.session_state and st.session_state.results:
-            heatmap = plot_heatmap(st.session_state.results.get('intrinsic_value', 0), volatility_adj, growth_adj)
-            if heatmap:
-                st.plotly_chart(heatmap, use_container_width=True)
+            try:
+                heatmap = plot_heatmap(st.session_state.results.get('intrinsic_value', 0), volatility_adj, growth_adj)
+                if heatmap:
+                    st.plotly_chart(heatmap, use_container_width=True)
+            except Exception as e:
+                st.error(f"Heatmap generation failed: {str(e)}")
         
         st.header("Monte Carlo Simulation")
         if 'results' in st.session_state and st.session_state.results:
             with st.spinner("Running Monte Carlo simulation..."):
-                with ThreadPoolExecutor() as executor:
-                    mc_results = executor.submit(run_monte_carlo, st.session_state.data, monte_carlo_runs, volatility_adj, growth_adj).result()
-            st.metric("Average Intrinsic Value", f"${mc_results.get('avg_value', 0):.2f}")
-            st.metric("Std Dev", f"${mc_results.get('std_dev', 0):.2f}")
-            st.metric("Probability Undervalued (> Current Price)", f"{mc_results.get('prob_undervalued', 0):.2f}%")
-            mc_plot = plot_monte_carlo(mc_results)
-            if mc_plot:
-                st.plotly_chart(mc_plot, use_container_width=True)
+                try:
+                    with ThreadPoolExecutor() as executor:
+                        mc_results = executor.submit(run_monte_carlo, st.session_state.data, monte_carlo_runs, volatility_adj, growth_adj).result()
+                    st.metric("Average Intrinsic Value", f"${mc_results.get('avg_value', 0):.2f}")
+                    st.metric("Std Dev", f"${mc_results.get('std_dev', 0):.2f}")
+                    st.metric("Probability Undervalued (> Current Price)", f"{mc_results.get('prob_undervalued', 0):.2f}%")
+                    mc_plot = plot_monte_carlo(mc_results)
+                    if mc_plot:
+                        st.plotly_chart(mc_plot, use_container_width=True)
+                except Exception as e:
+                    st.error(f"Monte Carlo simulation failed: {str(e)}")
         
         st.header("Model Comparison")
         if 'results' in st.session_state and st.session_state.results:
-            model_comp = pd.DataFrame({
-                'Model': ['S2F', 'Metcalfe', 'NVT', 'Pi Cycle', 'Reverse S2F', 'MSC', 'Energy', 'RVMR', 'Mayer', 'Hash Ribbons', 'Macro Monetary'],
-                'Intrinsic Value': [
-                    st.session_state.results.get('s2f_value', 0),
-                    st.session_state.results.get('metcalfe_value', 0),
-                    st.session_state.results.get('nvt_value', 0),
-                    st.session_state.results.get('pi_cycle_value', 0),
-                    st.session_state.results.get('reverse_s2f_value', 0),
-                    st.session_state.results.get('msc_value', 0),
-                    st.session_state.results.get('energy_value', 0),
-                    st.session_state.results.get('rvmr_value', 0),
-                    st.session_state.results.get('mayer_multiple_value', 0),
-                    st.session_state.results.get('hash_ribbons_value', 0),
-                    st.session_state.results.get('macro_monetary_value', 0)
-                ]
-            })
-            model_comp_fig = plot_model_comparison(model_comp)
-            if model_comp_fig:
-                st.plotly_chart(model_comp_fig, use_container_width=True)
+            try:
+                model_comp = pd.DataFrame({
+                    'Model': ['S2F', 'Metcalfe', 'NVT', 'Pi Cycle', 'Reverse S2F', 'MSC', 'Energy', 'RVMR', 'Mayer', 'Hash Ribbons', 'Macro Monetary'],
+                    'Intrinsic Value': [
+                        st.session_state.results.get('s2f_value', 0),
+                        st.session_state.results.get('metcalfe_value', 0),
+                        st.session_state.results.get('nvt_value', 0),
+                        st.session_state.results.get('pi_cycle_value', 0),
+                        st.session_state.results.get('reverse_s2f_value', 0),
+                        st.session_state.results.get('msc_value', 0),
+                        st.session_state.results.get('energy_value', 0),
+                        st.session_state.results.get('rvmr_value', 0),
+                        st.session_state.results.get('mayer_multiple_value', 0),
+                        st.session_state.results.get('hash_ribbons_value', 0),
+                        st.session_state.results.get('macro_monetary_value', 0)
+                    ]
+                })
+                model_comp_fig = plot_model_comparison(model_comp)
+                if model_comp_fig:
+                    st.plotly_chart(model_comp_fig, use_container_width=True)
+            except Exception as e:
+                st.error(f"Model comparison failed: {str(e)}")
 
 with tab2:
     st.header("On-Chain & Sentiment Analysis")
-    history = fetch_history()
-    if not history.empty:
-        price_plot = plot_price_history(history)
-        if price_plot:
-            st.plotly_chart(price_plot, use_container_width=True)
-        
-        onchain_plot = plot_onchain_metrics(st.session_state.data, history)
-        if onchain_plot:
-            st.plotly_chart(onchain_plot, use_container_width=True)
-        
-        sentiment_plot = plot_sentiment_analysis(st.session_state.data, history)
-        if sentiment_plot:
-            st.plotly_chart(sentiment_plot, use_container_width=True)
-        
-        macro_plot = plot_macro_correlations(st.session_state.data, history)
-        if macro_plot:
-            st.plotly_chart(macro_plot, use_container_width=True)
+    try:
+        history = fetch_history()
+        if not history.empty:
+            price_plot = plot_price_history(history)
+            if price_plot:
+                st.plotly_chart(price_plot, use_container_width=True)
+            
+            onchain_plot = plot_onchain_metrics(st.session_state.data, history)
+            if onchain_plot:
+                st.plotly_chart(onchain_plot, use_container_width=True)
+            
+            sentiment_plot = plot_sentiment_analysis(st.session_state.data, history)
+            if sentiment_plot:
+                st.plotly_chart(sentiment_plot, use_container_width=True)
+            
+            macro_plot = plot_macro_correlations(st.session_state.data, history)
+            if macro_plot:
+                st.plotly_chart(macro_plot, use_container_width=True)
+    except Exception as e:
+        st.error(f"On-chain & sentiment analysis failed: {str(e)}")
     
 st.markdown("---")
 st.markdown("*Disclaimer: This tool is for informational purposes only and not financial advice.*")
