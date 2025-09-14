@@ -48,7 +48,7 @@ def run_monte_carlo(inputs, num_runs=1000, volatility_adj=30.0, growth_adj=20.0)
             sim_inputs['volatility_adj'] = volatility_variations[i]
             sim_inputs['growth_adj'] = growth_variations[i]
             sim_inputs['hash_rate'] = hash_rate_variations[i]
-            sim_inputs['mining_cost'] = sim_inputs['hash_rate'] * 1000 * 0.05 * 24 * 365 / (6.25 * 144)
+            sim_inputs['mining_cost'] = sim_inputs['hash_rate'] * 1000 * sim_inputs['electricity_cost'] * 24 * 365 / (sim_inputs['block_reward'] * sim_inputs['blocks_per_day'])
             
             if validate_inputs(sim_inputs):
                 sim_results = calculate_valuation(sim_inputs)
