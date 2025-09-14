@@ -10,6 +10,7 @@ try:
     from monte_carlo import run_monte_carlo
 except ImportError as e:
     st.error(f"Failed to import modules: {str(e)}. Ensure all required files (e.g., utils.py) are in the project directory.")
+    logging.error(f"Import error: {str(e)}")
     st.stop()
 import logging
 
