@@ -1,212 +1,127 @@
-import streamlit as st
-import pandas as pd
-from reportlab.lib.pagesizes import letter
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib import colors
-import io
-import plotly.io as pio
-import logging
-
-# Configure logging
-logging.basicConfig(filename='app.log', level=logging.ERROR, format='%(asctime)s - %(levelname)s - %(message)s')
+from datetime import datetime
 
 def validate_inputs(inputs):
-    """
-    Validate input parameters.
-    Returns True if valid, False otherwise.
-    """
-    ranges = {
-        'current_price': (0, float('inf')),
-        'circulating_supply': (0, float('inf')),
-        'total_supply': (0, float('inf')),
-        'desired_return': (0, 50),
-        'margin_of_safety': (0, 100),
-        'hash_rate': (0, float('inf')),
-        'active_addresses': (0, float('inf')),
-        'transaction_volume': (0, float('inf')),
-        'mvrv': (0, float('inf')),
-        'sopr': (0, float('inf')),
-        'realized_cap': (0, float('inf')),
-        'puell_multiple': (0, float('inf')),
-        'mining_cost': (0, float('inf')),
-        'fear_greed': (0, 100),
-        'social_volume': (0, float('inf')),
-        'sentiment_score': (-1, 1),
-        'us_inflation': (0, 50),
-        'fed_rate': (0, 50),
-        'sp_correlation': (0, 1),
-        'gold_price': (0, float('inf')),
-        'rsi': (0, 100),
-        '50_day_ma': (0, float('inf')),
-        '200_day_ma': (0, float('inf')),
-        'monte_carlo_runs': (100, 2000),
-        'volatility_adj': (0, 50),
-        'growth_adj': (0, 50),
-        'beta': (0, float('inf')),
-        's2f_intercept': (0, 100),
-        's2f_slope': (0, 1),
-        'metcalfe_coeff': (0, 0.01),
-        'electricity_cost': (0, 1),
-        'block_reward': (0, 50),
-        'blocks_per_day': (100, 200),
-        # New model metrics
-        'rvmr': (0, 100),
-        'mayer_multiple': (0, 5),
-        'sentiment_index': (0, 2),
-        'inflation_premium': (0, 0.5),
-        'real_rate_discount': (0, 0.5)
-    }
+    errors = []
     
-    try:
-        for key, (min_val, max_val) in ranges.items():
-            if key in inputs and not (min_val <= inputs[key] <= max_val):
-                st.warning(f"{key.replace('_', ' ').title()} must be between {min_val} and {max_val}.")
-                return False
-        
-        # Logical checks
-        if inputs['50_day_ma'] > inputs['200_day_ma'] * 1.5:
-            st.warning("50-day MA significantly exceeds 200-day MA.")
-            return False
-        if inputs['circulating_supply'] > inputs['total_supply']:
-            st.warning("Circulating supply cannot exceed total supply.")
-            return False
-        
-        return True
-    except Exception as e:
-        logging.error(f"Error validating inputs: {str(e)}")
-        return False
-
-def export_portfolio(portfolio_df, filename="portfolio.csv"):
-    """
-    Export portfolio DataFrame to CSV.
-    """
-    try:
-        csv = portfolio_df.to_csv(index=False)
-        st.download_button(
-            label="Download Portfolio CSV",
-            data=csv,
-            file_name=filename,
-            mime="text/csv"
-        )
-    except Exception as e:
-        logging.error(f"Error exporting portfolio: {str(e)}")
-        st.warning("Failed to export portfolio.")
-
-def generate_pdf_report(results, portfolio_df, model_comp_fig):
-    """
-    Generate a PDF report with valuation results, portfolio, and model comparison chart.
-    """
-    try:
-        buffer = io.BytesIO()
-        doc = SimpleDocTemplate(buffer, pagesize=letter)
-        styles = getSampleStyleSheet()
-        story = []
-        
-        # Title
-        title_style = ParagraphStyle('CustomTitle', parent=styles['Heading1'], fontSize=18, spaceAfter=30, alignment=1)
-        story.append(Paragraph("Bitcoin Valuation Report", title_style))
-        story.append(Spacer(1, 12))
-        
-        # Valuation Results
-        story.append(Paragraph("Valuation Results", styles['Heading2']))
-        results_data = [
-            ['Metric', 'Value'],
-            ['Model', results.get('model', '-')],
-            ['Current Price', f"${results.get('current_price', 0):.2f}"],
-            ['Intrinsic Value', f"${results.get('intrinsic_value', 0):.2f}"],
-            ['Safe Buy Price', f"${results.get('safe_buy_price', 0):.2f}"],
-            ['Undervaluation %', f"{results.get('undervaluation', 0):.2f}%"],
-            ['Verdict', results.get('verdict', '-')],
-            ['Overall Score', f"{results.get('score', 0)}/100"],
-            ['NVT Ratio', f"{results.get('nvt_ratio', 0):.2f}"],
-            ['MVRV Z-Score', f"{results.get('mvrv_z_score', 0):.2f}"],
-            ['SOPR Signal', results.get('sopr_signal', '-')],
-            ['Puell Multiple Signal', results.get('puell_signal', '-')],
-            ['Mining Cost vs Price', f"{results.get('mining_cost_vs_price', 0):.2f}%"],
-            ['RVMR', f"{results.get('rvmr', 0):.2f}"],
-            ['Mayer Multiple', f"{results.get('mayer_multiple', 0):.2f}"],
-            ['Sentiment Index (MSC)', f"{results.get('sentiment_index', 0):.2f}"],
-            ['Hash Ribbons Signal', results.get('hash_ribbon_signal', '-')],
-            ['Inflation Premium (Macro)', f"{results.get('inflation_premium', 0):.2f}"],
-            ['Real Rate Discount (Macro)', f"{results.get('real_rate_discount', 0):.2f}"]
-        ]
-        results_table = Table(results_data)
-        results_table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
-            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-            ('FONTSIZE', (0, 0), (-1, 0), 14),
-            ('BOTTOMPADING', (0, 0), (-1, 0), 12),
-            ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
-            ('GRID', (0, 0), (-1, -1), 1, colors.black)
-        ]))
-        story.append(results_table)
-        story.append(Spacer(1, 12))
-        
-        # Model Comparison Chart
-        story.append(Paragraph("Model Comparison", styles['Heading2']))
-        if model_comp_fig:
+    # Required keys
+    required_keys = [
+        'model', 'current_price', 'total_supply', 'circulating_supply', 'next_halving_date',
+        'margin_of_safety', 'hash_rate', 'active_addresses', 'transaction_volume', 'mvrv',
+        'sopr', 'realized_cap', 'puell_multiple', 'mining_cost', 'fear_greed',
+        'social_volume', 'sentiment_score', 'us_inflation', 'fed_rate', 'sp_correlation',
+        'gold_price', 'rsi', '50_day_ma', '200_day_ma', 'desired_return',
+        'monte_carlo_runs', 'volatility_adj', 'growth_adj', 'beta', 'market_cap',
+        's2f_intercept', 's2f_slope', 'metcalfe_coeff', 'block_reward', 'blocks_per_day',
+        'electricity_cost'
+    ]
+    
+    # Check missing or None values
+    for key in required_keys:
+        if key not in inputs or inputs[key] is None:
+            errors.append(f"Missing or None value for {key}")
+    
+    # Type checking
+    numeric_keys = [
+        'current_price', 'total_supply', 'circulating_supply', 'margin_of_safety',
+        'hash_rate', 'active_addresses', 'transaction_volume', 'mvrv', 'sopr',
+        'realized_cap', 'puell_multiple', 'mining_cost', 'social_volume',
+        'sentiment_score', 'us_inflation', 'fed_rate', 'sp_correlation', 'gold_price',
+        'rsi', '50_day_ma', '200_day_ma', 'desired_return', 'volatility_adj',
+        'growth_adj', 'beta', 'market_cap', 's2f_intercept', 's2f_slope',
+        'metcalfe_coeff', 'block_reward', 'blocks_per_day', 'electricity_cost'
+    ]
+    for key in numeric_keys:
+        if key in inputs and inputs[key] is not None:
             try:
-                model_comp_fig.write_image('model_comp.png', format='PNG', width=400, height=200)
-                story.append(Image('model_comp.png', width=400, height=200))
-            except Exception as e:
-                logging.error(f"Error adding model comparison chart to PDF: {str(e)}")
-        
-        # Model Comparison Table
-        model_data = [
-            ['Model', 'Intrinsic Value'],
-            ['S2F', f"${results.get('s2f_value', 0):.2f}"],
-            ['Metcalfe', f"${results.get('metcalfe_value', 0):.2f}"],
-            ['NVT', f"${results.get('nvt_value', 0):.2f}"],
-            ['Pi Cycle', f"${results.get('pi_cycle_value', 0):.2f}"],
-            ['Reverse S2F', f"${results.get('reverse_s2f_value', 0):.2f}"],
-            ['MSC', f"${results.get('msc_value', 0):.2f}"],
-            ['Energy Value', f"${results.get('energy_value', 0):.2f}"],
-            ['RVMR', f"${results.get('rvmr_value', 0):.2f}"],
-            ['Mayer Multiple', f"${results.get('mayer_multiple_value', 0):.2f}"],
-            ['Hash Ribbons', f"${results.get('hash_ribbons_value', 0):.2f}"],
-            ['Macro Monetary', f"${results.get('macro_monetary_value', 0):.2f}"]
-        ]
-        model_table = Table(model_data)
-        model_table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
-            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-            ('FONTSIZE', (0, 0), (-1, 0), 14),
-            ('BOTTOMPADING', (0, 0), (-1, 0), 12),
-            ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
-            ('GRID', (0, 0), (-1, -1), 1, colors.black)
-        ]))
-        story.append(model_table)
-        story.append(Spacer(1, 12))
-        
-        # Portfolio
-        if not portfolio_df.empty:
-            story.append(Paragraph("Portfolio Overview", styles['Heading2']))
-            portfolio_data = [['Asset', 'Intrinsic Value', 'Undervaluation %', 'Verdict', 'Beta']] + portfolio_df.values.tolist()
-            portfolio_table = Table(portfolio_data)
-            portfolio_table.setStyle(TableStyle([
-                ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
-                ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-                ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-                ('FONTSIZE', (0, 0), (-1, 0), 14),
-                ('BOTTOMPADING', (0, 0), (-1, 0), 12),
-                ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
-                ('GRID', (0, 0), (-1, -1), 1, colors.black)
-            ]))
-            story.append(portfolio_table)
-        
-        story.append(Spacer(1, 12))
-        story.append(Paragraph("Disclaimer: This tool is for informational purposes only and not financial advice.", styles['Normal']))
-        
-        doc.build(story)
-        buffer.seek(0)
-        return buffer.getvalue()
+                inputs[key] = float(inputs[key])
+            except (TypeError, ValueError):
+                errors.append(f"Invalid type for {key}: expected float, got {type(inputs[key]).__name__}")
     
-    except Exception as e:
-        logging.error(f"Error generating PDF: {str(e)}")
-        return None
+    if 'fear_greed' in inputs and inputs['fear_greed'] is not None:
+        try:
+            inputs['fear_greed'] = int(inputs['fear_greed'])
+        except (TypeError, ValueError):
+            errors.append(f"Invalid type for fear_greed: expected int, got {type(inputs['fear_greed']).__name__}")
+    
+    if 'monte_carlo_runs' in inputs and inputs['monte_carlo_runs'] is not None:
+        try:
+            inputs['monte_carlo_runs'] = int(inputs['monte_carlo_runs'])
+        except (TypeError, ValueError):
+            errors.append(f"Invalid type for monte_carlo_runs: expected int, got {type(inputs['monte_carlo_runs']).__name__}")
+    
+    if 'next_halving_date' in inputs and inputs['next_halving_date'] is not None:
+        if not isinstance(inputs['next_halving_date'], datetime):
+            try:
+                inputs['next_halving_date'] = datetime.strptime(str(inputs['next_halving_date']), '%Y-%m-%d')
+            except (TypeError, ValueError):
+                errors.append(f"Invalid type for next_halving_date: expected datetime, got {type(inputs['next_halving_date']).__name__}")
+    
+    # Numeric constraints
+    if 'current_price' in inputs and isinstance(inputs['current_price'], (int, float)) and inputs['current_price'] <= 0:
+        errors.append("Current price must be positive")
+    if 'circulating_supply' in inputs and isinstance(inputs['circulating_supply'], (int, float)) and inputs['circulating_supply'] <= 0:
+        errors.append("Circulating supply must be positive")
+    if 'total_supply' in inputs and isinstance(inputs['total_supply'], (int, float)) and inputs['total_supply'] <= 0:
+        errors.append("Total supply must be positive")
+    if 'hash_rate' in inputs and isinstance(inputs['hash_rate'], (int, float)) and inputs['hash_rate'] < 0:
+        errors.append("Hash rate cannot be negative")
+    if 'active_addresses' in inputs and isinstance(inputs['active_addresses'], (int, float)) and inputs['active_addresses'] < 0:
+        errors.append("Active addresses cannot be negative")
+    if 'transaction_volume' in inputs and isinstance(inputs['transaction_volume'], (int, float)) and inputs['transaction_volume'] < 0:
+        errors.append("Transaction volume cannot be negative")
+    if 'mvrv' in inputs and isinstance(inputs['mvrv'], (int, float)) and inputs['mvrv'] < 0:
+        errors.append("MVRV cannot be negative")
+    if 'sopr' in inputs and isinstance(inputs['sopr'], (int, float)) and inputs['sopr'] < 0:
+        errors.append("SOPR cannot be negative")
+    if 'realized_cap' in inputs and isinstance(inputs['realized_cap'], (int, float)) and inputs['realized_cap'] < 0:
+        errors.append("Realized cap cannot be negative")
+    if 'puell_multiple' in inputs and isinstance(inputs['puell_multiple'], (int, float)) and inputs['puell_multiple'] < 0:
+        errors.append("Puell multiple cannot be negative")
+    if 'mining_cost' in inputs and isinstance(inputs['mining_cost'], (int, float)) and inputs['mining_cost'] < 0:
+        errors.append("Mining cost cannot be negative")
+    if 'fear_greed' in inputs and isinstance(inputs['fear_greed'], int) and (inputs['fear_greed'] < 0 or inputs['fear_greed'] > 100):
+        errors.append("Fear & Greed must be between 0 and 100")
+    if 'social_volume' in inputs and isinstance(inputs['social_volume'], (int, float)) and inputs['social_volume'] < 0:
+        errors.append("Social volume cannot be negative")
+    if 'sentiment_score' in inputs and isinstance(inputs['sentiment_score'], (int, float)) and (inputs['sentiment_score'] < -1 or inputs['sentiment_score'] > 1):
+        errors.append("Sentiment score must be between -1 and 1")
+    if 'us_inflation' in inputs and isinstance(inputs['us_inflation'], (int, float)) and inputs['us_inflation'] < 0:
+        errors.append("US inflation cannot be negative")
+    if 'fed_rate' in inputs and isinstance(inputs['fed_rate'], (int, float)) and inputs['fed_rate'] < 0:
+        errors.append("Fed rate cannot be negative")
+    if 'sp_correlation' in inputs and isinstance(inputs['sp_correlation'], (int, float)) and (inputs['sp_correlation'] < 0 or inputs['sp_correlation'] > 1):
+        errors.append("S&P 500 correlation must be between 0 and 1")
+    if 'gold_price' in inputs and isinstance(inputs['gold_price'], (int, float)) and inputs['gold_price'] < 0:
+        errors.append("Gold price cannot be negative")
+    if 'rsi' in inputs and isinstance(inputs['rsi'], (int, float)) and (inputs['rsi'] < 0 or inputs['rsi'] > 100):
+        errors.append("RSI must be between 0 and 100")
+    if '50_day_ma' in inputs and isinstance(inputs['50_day_ma'], (int, float)) and inputs['50_day_ma'] < 0:
+        errors.append("50-day MA cannot be negative")
+    if '200_day_ma' in inputs and isinstance(inputs['200_day_ma'], (int, float)) and inputs['200_day_ma'] < 0:
+        errors.append("200-day MA cannot be negative")
+    if 'desired_return' in inputs and isinstance(inputs['desired_return'], (int, float)) and inputs['desired_return'] < 0:
+        errors.append("Desired return cannot be negative")
+    if 'monte_carlo_runs' in inputs and isinstance(inputs['monte_carlo_runs'], int) and inputs['monte_carlo_runs'] < 100:
+        errors.append("Monte Carlo runs must be at least 100")
+    if 'volatility_adj' in inputs and isinstance(inputs['volatility_adj'], (int, float)) and inputs['volatility_adj'] < 0:
+        errors.append("Volatility adjustment cannot be negative")
+    if 'growth_adj' in inputs and isinstance(inputs['growth_adj'], (int, float)) and inputs['growth_adj'] < 0:
+        errors.append("Growth adjustment cannot be negative")
+    if 'beta' in inputs and isinstance(inputs['beta'], (int, float)) and inputs['beta'] < 0:
+        errors.append("Beta cannot be negative")
+    if 'market_cap' in inputs and isinstance(inputs['market_cap'], (int, float)) and inputs['market_cap'] < 0:
+        errors.append("Market cap cannot be negative")
+    if 's2f_intercept' in inputs and isinstance(inputs['s2f_intercept'], (int, float)) and inputs['s2f_intercept'] < 0:
+        errors.append("S2F intercept cannot be negative")
+    if 's2f_slope' in inputs and isinstance(inputs['s2f_slope'], (int, float)) and inputs['s2f_slope'] < 0:
+        errors.append("S2F slope cannot be negative")
+    if 'metcalfe_coeff' in inputs and isinstance(inputs['metcalfe_coeff'], (int, float)) and inputs['metcalfe_coeff'] < 0:
+        errors.append("Metcalfe coefficient cannot be negative")
+    if 'block_reward' in inputs and isinstance(inputs['block_reward'], (int, float)) and inputs['block_reward'] < 0:
+        errors.append("Block reward cannot be negative")
+    if 'blocks_per_day' in inputs and isinstance(inputs['blocks_per_day'], (int, float)) and inputs['blocks_per_day'] < 0:
+        errors.append("Blocks per day cannot be negative")
+    if 'electricity_cost' in inputs and isinstance(inputs['electricity_cost'], (int, float)) and inputs['electricity_cost'] < 0:
+        errors.append("Electricity cost cannot be negative")
+    
+    return len(errors) == 0, errors
