@@ -5,8 +5,21 @@ import yfinance as yf
 from datetime import datetime, timedelta
 from bs4 import BeautifulSoup
 import streamlit as st
+from tenacity import retry, stop_after_attempt, wait_exponential
+import logging
+from dotenv import load_dotenv
+import os
 
-@st.cache_data(ttl=3600)
+# Configure logging
+logging.basicConfig(filename='app.log', level=logging.ERROR, format='%(asctime)s - %(levelname)s - %(message)s')
+load_dotenv()
+
+@st.cache_resource
+def get_yfinance_ticker(symbol):
+    return yf.Ticker(symbol)
+
+@st.cache_data(ttl=300)
+@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
 def fetch_bitcoin_data():
     """
     Fetch Bitcoin data from various sources.
@@ -17,7 +30,7 @@ def fetch_bitcoin_data():
     # CoinGecko for market data
     try:
         cg_url = "https://api.coingecko.com/api/v3/coins/bitcoin"
-        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36', 'X-API-Key': os.getenv('COINGECKO_API_KEY', '')}
         cg_response = requests.get(cg_url, headers=headers).json()
         market_data = cg_response['market_data']
         
@@ -34,7 +47,8 @@ def fetch_bitcoin_data():
         data['sentiment_score'] = (up - down) / 100 if up and down else 0.0
         
     except Exception as e:
-        st.error(f"Error fetching from CoinGecko: {str(e)}")
+        logging.error(f"Error fetching from CoinGecko: {str(e)}")
+        st.warning("Unable to fetch market data. Using defaults.")
         data['current_price'] = 60000.0
         data['market_cap'] = 1.2e12
         data['total_volume'] = 5e10
@@ -44,13 +58,15 @@ def fetch_bitcoin_data():
         data['sentiment_score'] = 0.5
     
     # Blockchain.com for on-chain
-    def get_latest(chart_name):
+    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
+    def get_latest(chart_name, timespan='1days'):
         try:
-            url = f"https://api.blockchain.info/charts/{chart_name}?format=json&timespan=1days"
+            url = f"https://api.blockchain.info/charts/{chart_name}?format=json&timespan={timespan}"
             headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
             response = requests.get(url, headers=headers).json()
             return response['values'][-1]['y']
-        except:
+        except Exception as e:
+            logging.error(f"Error fetching {chart_name}: {str(e)}")
             return 0.0
     
     data['hash_rate'] = get_latest('hash-rate') or 500.0
@@ -62,7 +78,11 @@ def fetch_bitcoin_data():
     data['realized_cap'] = data['market_cap'] / data['mvrv'] if data['mvrv'] > 0 else 6e11
     
     # Mining cost estimation
-    data['mining_cost'] = 20000.0
+    def estimate_mining_cost(hash_rate):
+        electricity_cost = 0.05  # $/kWh
+        power_consumption = hash_rate * 1000  # Simplified
+        return power_consumption * electricity_cost * 24 * 365 / (6.25 * 144)
+    data['mining_cost'] = estimate_mining_cost(data['hash_rate'])
     
     # Next halving
     try:
@@ -73,7 +93,8 @@ def fetch_bitcoin_data():
         minutes_left = blocks_left * 10
         days_left = minutes_left / 1440
         data['next_halving_date'] = datetime.now() + timedelta(days=days_left)
-    except:
+    except Exception as e:
+        logging.error(f"Error calculating halving: {str(e)}")
         data['next_halving_date'] = datetime(2028, 4, 1)
     
     # Fear & Greed
@@ -81,14 +102,16 @@ def fetch_bitcoin_data():
         fng_url = "https://api.alternative.me/fng/?limit=1"
         fng_response = requests.get(fng_url, headers=headers).json()
         data['fear_greed'] = int(fng_response['data'][0]['value'])
-    except:
+    except Exception as e:
+        logging.error(f"Error fetching Fear & Greed: {str(e)}")
         data['fear_greed'] = 50
     
     # Macro: Gold price
     try:
-        gold = yf.Ticker('GC=F')
+        gold = get_yfinance_ticker('GC=F')
         data['gold_price'] = gold.info.get('currentPrice', gold.info.get('regularMarketPrice', 2000.0))
-    except:
+    except Exception as e:
+        logging.error(f"Error fetching gold price: {str(e)}")
         data['gold_price'] = 2000.0
     
     # Macro: S&P 500 correlation
@@ -99,7 +122,8 @@ def fetch_bitcoin_data():
         sp_hist = yf.download('^GSPC', start=start, end=end)['Close']
         correlation = btc_hist.corr(sp_hist)
         data['sp_correlation'] = correlation if not np.isnan(correlation) else 0.5
-    except:
+    except Exception as e:
+        logging.error(f"Error calculating S&P correlation: {str(e)}")
         data['sp_correlation'] = 0.5
     
     # Macro: US Inflation
@@ -111,7 +135,8 @@ def fetch_bitcoin_data():
         latest_row = table.find_all('tr')[-1]
         cols = latest_row.find_all('td')
         data['us_inflation'] = float(cols[-1].text.strip().replace('%', '')) or 3.0
-    except:
+    except Exception as e:
+        logging.error(f"Error fetching inflation rate: {str(e)}")
         data['us_inflation'] = 3.0
     
     # Macro: Fed Interest Rate
@@ -122,7 +147,8 @@ def fetch_bitcoin_data():
         table = soup.find('table', id='h15table')
         fed_rate = float(table.find_all('tr')[-1].find_all('td')[-1].text.strip())
         data['fed_rate'] = fed_rate or 5.0
-    except:
+    except Exception as e:
+        logging.error(f"Error fetching Fed rate: {str(e)}")
         data['fed_rate'] = 5.0
     
     # Technical
@@ -135,7 +161,8 @@ def fetch_bitcoin_data():
         loss = (-delta.where(delta < 0, 0)).rolling(14).mean()
         rs = gain / loss
         data['rsi'] = 100 - 100 / (1 + rs).iloc[-1] if not rs.empty else 50.0
-    except:
+    except Exception as e:
+        logging.error(f"Error calculating technical indicators: {str(e)}")
         data['50_day_ma'] = data['current_price'] * 0.95
         data['200_day_ma'] = data['current_price'] * 0.9
         data['rsi'] = 50.0
@@ -150,13 +177,28 @@ def fetch_bitcoin_data():
     
     return data
 
-@st.cache_data(ttl=3600)
+@st.cache_data(ttl=86400)
+@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
 def fetch_history(period='5y'):
     """
-    Fetch historical price data for Bitcoin.
+    Fetch historical price and on-chain data for Bitcoin.
     """
     try:
-        return yf.download('BTC-USD', period=period)
+        df = yf.download('BTC-USD', period=period)
+        for metric in ['n-unique-addresses', 'estimated-transaction-volume-usd', 'mvrv', 'sopr', 'puell_multiple']:
+            try:
+                url = f"https://api.blockchain.info/charts/{metric}?format=json&timespan={period}"
+                headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+                response = requests.get(url, headers=headers).json()
+                values = pd.DataFrame(response['values'])
+                values['x'] = pd.to_datetime(values['x'], unit='s')
+                values.set_index('x', inplace=True)
+                df[metric] = values['y'].reindex(df.index, method='ffill')
+            except Exception as e:
+                logging.error(f"Error fetching historical {metric}: {str(e)}")
+                df[metric] = 0.0
+        return df
     except Exception as e:
-        st.error(f"Error fetching historical data: {str(e)}")
+        logging.error(f"Error fetching historical data: {str(e)}")
+        st.warning("Unable to fetch historical data.")
         return pd.DataFrame()
