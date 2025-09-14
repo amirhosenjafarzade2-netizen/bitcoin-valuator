@@ -56,6 +56,8 @@ def calculate_valuation(inputs):
             results = mayer_multiple(inputs)
         elif model == "Hash Ribbons":
             results = hash_ribbons(inputs, history)
+        elif model == "Macro Monetary Model":
+            results = macro_monetary_model(inputs)
         else:
             results = {'intrinsic_value': 0, 'error': 'Unknown model'}
         
@@ -86,7 +88,8 @@ def calculate_valuation(inputs):
             'energy_value': energy_value_model(inputs).get('intrinsic_value', 0),
             'rvmr_value': rvmr_model(inputs).get('intrinsic_value', 0),
             'mayer_multiple_value': mayer_multiple(inputs).get('intrinsic_value', 0),
-            'hash_ribbons_value': hash_ribbons(inputs, history).get('intrinsic_value', 0)
+            'hash_ribbons_value': hash_ribbons(inputs, history).get('intrinsic_value', 0),
+            'macro_monetary_value': macro_monetary_model(inputs).get('intrinsic_value', 0)
         }
         results.update(all_models)
         
@@ -198,3 +201,13 @@ def hash_ribbons(inputs, history):
     adjustment = 1.2 if signal == 'Buy' else 0.8 if signal == 'Sell' else 1.0
     intrinsic_value = inputs['current_price'] * adjustment * (1 - inputs['volatility_adj'] / 100)
     return {'intrinsic_value': intrinsic_value, 'hash_ribbon_signal': signal}
+
+def macro_monetary_model(inputs):
+    """Macro Monetary Model: Adjusts Metcalfe's base value by inflation and real rates."""
+    n = inputs['active_addresses']
+    base_value = (n ** 2) * inputs['metcalfe_coeff']  # Metcalfe's Law as baseline
+    inflation_premium = inputs['us_inflation'] / 100 * 0.5  # 50% sensitivity to inflation
+    real_rate = inputs['fed_rate'] - inputs['us_inflation']
+    rate_discount = max(real_rate / 100, 0)  # No negative discount
+    intrinsic_value = base_value * (1 + inflation_premium - rate_discount) * (1 - inputs['volatility_adj'] / 100)
+    return {'intrinsic_value': intrinsic_value, 'inflation_premium': inflation_premium, 'real_rate_discount': rate_discount}
