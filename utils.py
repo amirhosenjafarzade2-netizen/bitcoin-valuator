@@ -1,0 +1,154 @@
+import streamlit as st
+import pandas as pd
+from reportlab.lib.pagesizes import letter
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib import colors
+import io
+
+def validate_inputs(inputs):
+    """
+    Validate input parameters.
+    Returns True if valid, False otherwise.
+    """
+    ranges = {
+        'current_price': (0, float('inf')),
+        'circulating_supply': (0, float('inf')),
+        'total_supply': (0, float('inf')),
+        'desired_return': (0, 50),
+        'margin_of_safety': (0, 100),
+        'hash_rate': (0, float('inf')),
+        'active_addresses': (0, float('inf')),
+        'transaction_volume': (0, float('inf')),
+        'mvrv': (0, float('inf')),
+        'sopr': (0, float('inf')),
+        'realized_cap': (0, float('inf')),
+        'puell_multiple': (0, float('inf')),
+        'mining_cost': (0, float('inf')),
+        'fear_greed': (0, 100),
+        'social_volume': (0, float('inf')),
+        'sentiment_score': (-1, 1),
+        'us_inflation': (0, 50),
+        'fed_rate': (0, 50),
+        'sp_correlation': (0, 1),
+        'gold_price': (0, float('inf')),
+        'rsi': (0, 100),
+        '50_day_ma': (0, float('inf')),
+        '200_day_ma': (0, float('inf')),
+        'monte_carlo_runs': (100, 2000),
+        'volatility_adj': (0, 50),
+        'growth_adj': (0, 50),
+        'beta': (0, float('inf'))
+    }
+    
+    for key, (min_val, max_val) in ranges.items():
+        if key in inputs and not (min_val <= inputs[key] <= max_val):
+            st.warning(f"{key.replace('_', ' ').title()} must be between {min_val} and {max_val}.")
+            return False
+    
+    return True
+
+def export_portfolio(portfolio_df, filename="portfolio.csv"):
+    """
+    Export portfolio DataFrame to CSV.
+    """
+    csv = portfolio_df.to_csv(index=False)
+    st.download_button(
+        label="Download Portfolio CSV",
+        data=csv,
+        file_name=filename,
+        mime="text/csv"
+    )
+
+def generate_pdf_report(results, portfolio_df):
+    """
+    Generate a PDF report of valuation results and portfolio.
+    """
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=letter)
+    styles = getSampleStyleSheet()
+    story = []
+    
+    # Title
+    title_style = ParagraphStyle('CustomTitle', parent=styles['Heading1'], fontSize=18, spaceAfter=30, alignment=1)
+    story.append(Paragraph("Bitcoin Valuation Report", title_style))
+    story.append(Spacer(1, 12))
+    
+    # Valuation Results
+    story.append(Paragraph("Valuation Results", styles['Heading2']))
+    results_data = [
+        ['Metric', 'Value'],
+        ['Model', results.get('model', '-')],
+        ['Current Price', f"${results.get('current_price', 0):.2f}"],
+        ['Intrinsic Value', f"${results.get('intrinsic_value', 0):.2f}"],
+        ['Safe Buy Price', f"${results.get('safe_buy_price', 0):.2f}"],
+        ['Undervaluation %', f"{results.get('undervaluation', 0):.2f}%"],
+        ['Verdict', results.get('verdict', '-')],
+        ['Overall Score', f"{results.get('score', 0)}/100"],
+        ['NVT Ratio', f"{results.get('nvt_ratio', 0):.2f}"],
+        ['MVRV Z-Score', f"{results.get('mvrv_z_score', 0):.2f}"],
+        ['SOPR Signal', results.get('sopr_signal', '-')],
+        ['Puell Multiple Signal', results.get('puell_signal', '-')],
+        ['Mining Cost vs Price', f"{results.get('mining_cost_vs_price', 0):.2f}%"]
+    ]
+    results_table = Table(results_data)
+    results_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, 0), 14),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+        ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+        ('GRID', (0, 0), (-1, -1), 1, colors.black)
+    ]))
+    story.append(results_table)
+    story.append(Spacer(1, 12))
+    
+    # Model Comparison
+    story.append(Paragraph("Model Comparison", styles['Heading2']))
+    model_data = [
+        ['Model', 'Intrinsic Value'],
+        ['S2F', f"${results.get('s2f_value', 0):.2f}"],
+        ['Metcalfe', f"${results.get('metcalfe_value', 0):.2f}"],
+        ['NVT', f"${results.get('nvt_value', 0):.2f}"],
+        ['Pi Cycle', f"${results.get('pi_cycle_value', 0):.2f}"],
+        ['Reverse S2F', f"${results.get('reverse_s2f_value', 0):.2f}"]
+    ]
+    model_table = Table(model_data)
+    model_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, 0), 14),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+        ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+        ('GRID', (0, 0), (-1, -1), 1, colors.black)
+    ]))
+    story.append(model_table)
+    story.append(Spacer(1, 12))
+    
+    # Portfolio
+    if not portfolio_df.empty:
+        story.append(Paragraph("Portfolio Overview", styles['Heading2']))
+        portfolio_data = [['Asset', 'Intrinsic Value', 'Undervaluation %', 'Verdict', 'Beta']] + portfolio_df.values.tolist()
+        portfolio_table = Table(portfolio_data)
+        portfolio_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 14),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+            ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+            ('GRID', (0, 0), (-1, -1), 1, colors.black)
+        ]))
+        story.append(portfolio_table)
+    
+    story.append(Spacer(1, 12))
+    story.append(Paragraph("Disclaimer: This tool is for informational purposes only and not financial advice.", styles['Normal']))
+    
+    doc.build(story)
+    buffer.seek(0)
+    return buffer.getvalue()
