@@ -1,210 +1,149 @@
-import requests
-import pandas as pd
 import numpy as np
-import yfinance as yf
+import pandas as pd
 from datetime import datetime, timedelta
-from bs4 import BeautifulSoup
-import streamlit as st
-from tenacity import retry, stop_after_attempt, wait_exponential
 import logging
-from dotenv import load_dotenv
-import os
+from data_fetch import fetch_history
 
 # Configure logging
 logging.basicConfig(filename='app.log', level=logging.ERROR, format='%(asctime)s - %(levelname)s - %(message)s')
-load_dotenv()
 
-@st.cache_resource
-def get_yfinance_ticker(symbol):
-    return yf.Ticker(symbol)
-
-@st.cache_data(ttl=300)
-@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
-def fetch_bitcoin_data(electricity_cost=0.05):
+def calibrate_s2f(history, s2f_intercept=14.6, s2f_slope=0.05):
     """
-    Fetch Bitcoin data from various sources.
-    electricity_cost: Cost per kWh for mining cost estimation ($/kWh).
+    Calibrate S2F model using historical data or user-provided coefficients.
+    """
+    try:
+        if history.empty:
+            return [s2f_intercept, s2f_slope]
+        stock = history['circulating_supply'] if 'circulating_supply' in history else 19700000
+        flow = 6.25 * 144 * 365
+        sf = stock / flow if flow > 0 else 100
+        log_price = np.log(history['Close'])
+        coeffs = np.polyfit(sf, log_price, 1)
+        return coeffs
+    except Exception as e:
+        logging.error(f"Error calibrating S2F: {str(e)}")
+        return [s2f_intercept, s2f_slope]
+
+def calculate_valuation(inputs):
+    """
+    Calculate intrinsic value based on the selected model.
     Returns a dictionary with relevant metrics.
     """
-    data = {}
+    model = inputs['model']
+    current_price = inputs['current_price']
+    mos = inputs['margin_of_safety']
+    volatility_adj = inputs['volatility_adj']
     
-    # CoinGecko for market data
     try:
-        cg_url = "https://api.coingecko.com/api/v3/coins/bitcoin"
-        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36', 'X-API-Key': os.getenv('COINGECKO_API_KEY', '')}
-        cg_response = requests.get(cg_url, headers=headers).json()
-        market_data = cg_response['market_data']
+        if model == "Stock-to-Flow (S2F)":
+            results = s2f_model(inputs)
+        elif model == "Metcalfe's Law":
+            results = metcalfe_law(inputs)
+        elif model == "Network Value to Transactions (NVT)":
+            results = nvt_model(inputs)
+        elif model == "Pi Cycle Top Indicator":
+            results = pi_cycle(inputs)
+        elif model == "Reverse S2F":
+            results = reverse_s2f(inputs)
+        else:
+            results = {'intrinsic_value': 0, 'error': 'Unknown model'}
         
-        data['current_price'] = market_data['current_price']['usd']
-        data['market_cap'] = market_data['market_cap']['usd']
-        data['total_volume'] = market_data['total_volume']['usd']
-        data['circulating_supply'] = market_data['circulating_supply']
-        data['total_supply'] = market_data['max_supply'] or 21000000
+        # Common metrics
+        intrinsic_value = results.get('intrinsic_value', 0) * (1 - volatility_adj / 100)
+        results['current_price'] = current_price
+        results['intrinsic_value'] = max(intrinsic_value, 0) * (1 - mos / 100)
+        results['safe_buy_price'] = results['intrinsic_value']
+        results['undervaluation'] = ((intrinsic_value - current_price) / current_price * 100) if current_price > 0 else 0
+        results['verdict'] = get_verdict(results['undervaluation'])
+        results['score'] = calculate_score(inputs, results)
         
-        community = cg_response['community_data']
-        data['social_volume'] = community['reddit_average_posts_48h'] + community['twitter_followers'] / 1000
-        up = cg_response['sentiment_votes_up_percentage']
-        down = cg_response['sentiment_votes_down_percentage']
-        data['sentiment_score'] = (up - down) / 100 if up and down else 0.0
+        # Model-specific metrics
+        results['nvt_ratio'] = inputs['market_cap'] / inputs['transaction_volume'] if inputs['transaction_volume'] > 0 else 50
+        results['mvrv_z_score'] = (inputs['mvrv'] - 1) / 0.5 if inputs['mvrv'] > 0 else 0
+        results['sopr_signal'] = 'Buy' if inputs['sopr'] < 1 else 'Sell' if inputs['sopr'] > 1.2 else 'Hold'
+        results['puell_signal'] = 'Buy' if inputs['puell_multiple'] < 0.5 else 'Sell' if inputs['puell_multiple'] > 4 else 'Hold'
+        results['mining_cost_vs_price'] = (inputs['mining_cost'] - current_price) / current_price * 100 if current_price > 0 else 0
         
+        # All model values
+        all_models = {
+            's2f_value': s2f_model(inputs).get('intrinsic_value', 0),
+            'metcalfe_value': metcalfe_law(inputs).get('intrinsic_value', 0),
+            'nvt_value': nvt_model(inputs).get('intrinsic_value', 0),
+            'pi_cycle_value': pi_cycle(inputs).get('intrinsic_value', 0),
+            'reverse_s2f_value': reverse_s2f(inputs).get('intrinsic_value', 0)
+        }
+        results.update(all_models)
+        
+        return results
+    
     except Exception as e:
-        logging.error(f"Error fetching from CoinGecko: {str(e)}")
-        st.warning("Unable to fetch market data. Using defaults.")
-        data['current_price'] = 60000.0
-        data['market_cap'] = 1.2e12
-        data['total_volume'] = 5e10
-        data['circulating_supply'] = 19700000
-        data['total_supply'] = 21000000
-        data['social_volume'] = 10000
-        data['sentiment_score'] = 0.5
-    
-    # Blockchain.com for on-chain
-    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
-    def get_latest(chart_name, timespan='1days'):
-        try:
-            url = f"https://api.blockchain.info/charts/{chart_name}?format=json&timespan={timespan}"
-            headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
-            response = requests.get(url, headers=headers).json()
-            return response['values'][-1]['y']
-        except Exception as e:
-            logging.error(f"Error fetching {chart_name}: {str(e)}")
-            return 0.0
-    
-    data['hash_rate'] = get_latest('hash-rate') or 500.0
-    data['active_addresses'] = get_latest('n-unique-addresses') or 1000000
-    data['transaction_volume'] = get_latest('estimated-transaction-volume-usd') or 1e9
-    data['mvrv'] = get_latest('mvrv') or 2.0
-    data['sopr'] = get_latest('sopr') or 1.0
-    data['puell_multiple'] = get_latest('puell_multiple') or 1.0
-    data['realized_cap'] = data['market_cap'] / data['mvrv'] if data['mvrv'] > 0 else 6e11
-    
-    # Mining cost estimation
-    def estimate_mining_cost(hash_rate, electricity_cost):
-        power_consumption = hash_rate * 1000  # Simplified
-        return power_consumption * electricity_cost * 24 * 365 / (6.25 * 144)
-    data['mining_cost'] = estimate_mining_cost(data['hash_rate'], electricity_cost)
-    data['electricity_cost'] = electricity_cost  # Store for UI
-    
-    # Next halving
-    try:
-        height = requests.get('https://blockchain.info/q/getblockcount', headers=headers).json()
-        current_cycle = height // 210000
-        next_halving_block = (current_cycle + 1) * 210000
-        blocks_left = next_halving_block - height
-        minutes_left = blocks_left * 10
-        days_left = minutes_left / 1440
-        data['next_halving_date'] = datetime.now() + timedelta(days=days_left)
-    except Exception as e:
-        logging.error(f"Error calculating halving: {str(e)}")
-        data['next_halving_date'] = datetime(2028, 4, 1)
-    
-    # Fear & Greed
-    try:
-        fng_url = "https://api.alternative.me/fng/?limit=1"
-        fng_response = requests.get(fng_url, headers=headers).json()
-        data['fear_greed'] = int(fng_response['data'][0]['value'])
-    except Exception as e:
-        logging.error(f"Error fetching Fear & Greed: {str(e)}")
-        data['fear_greed'] = 50
-    
-    # Macro: Gold price
-    try:
-        gold = get_yfinance_ticker('GC=F')
-        data['gold_price'] = gold.info.get('currentPrice', gold.info.get('regularMarketPrice', 2000.0))
-    except Exception as e:
-        logging.error(f"Error fetching gold price: {str(e)}")
-        data['gold_price'] = 2000.0
-    
-    # Macro: S&P 500 correlation
-    try:
-        end = datetime.now()
-        start = end - timedelta(days=365)
-        btc_hist = yf.download('BTC-USD', start=start, end=end)['Close']
-        sp_hist = yf.download('^GSPC', start=start, end=end)['Close']
-        correlation = btc_hist.corr(sp_hist)
-        data['sp_correlation'] = correlation if not np.isnan(correlation) else 0.5
-    except Exception as e:
-        logging.error(f"Error calculating S&P correlation: {str(e)}")
-        data['sp_correlation'] = 0.5
-    
-    # Macro: US Inflation
-    try:
-        inf_url = "https://www.usinflationcalculator.com/inflation/current-inflation-rates/"
-        response = requests.get(inf_url, headers=headers)
-        soup = BeautifulSoup(response.text, 'html.parser')
-        table = soup.find('table')
-        latest_row = table.find_all('tr')[-1]
-        cols = latest_row.find_all('td')
-        data['us_inflation'] = float(cols[-1].text.strip().replace('%', '')) or 3.0
-    except Exception as e:
-        logging.error(f"Error fetching inflation rate: {str(e)}")
-        data['us_inflation'] = 3.0
-    
-    # Macro: Fed Interest Rate
-    try:
-        fed_url = "https://www.federalreserve.gov/releases/h15/"
-        response = requests.get(fed_url, headers=headers)
-        soup = BeautifulSoup(response.text, 'html.parser')
-        table = soup.find('table', id='h15table')
-        fed_rate = float(table.find_all('tr')[-1].find_all('td')[-1].text.strip())
-        data['fed_rate'] = fed_rate or 5.0
-    except Exception as e:
-        logging.error(f"Error fetching Fed rate: {str(e)}")
-        data['fed_rate'] = 5.0
-    
-    # Technical
-    try:
-        hist = yf.download('BTC-USD', period='1y')['Close']
-        data['50_day_ma'] = hist.rolling(50).mean().iloc[-1] if not hist.empty else data['current_price'] * 0.95
-        data['200_day_ma'] = hist.rolling(200).mean().iloc[-1] if not hist.empty else data['current_price'] * 0.9
-        delta = hist.diff(1)
-        gain = (delta.where(delta > 0, 0)).rolling(14).mean()
-        loss = (-delta.where(delta < 0, 0)).rolling(14).mean()
-        rs = gain / loss
-        data['rsi'] = 100 - 100 / (1 + rs).iloc[-1] if not rs.empty else 50.0
-    except Exception as e:
-        logging.error(f"Error calculating technical indicators: {str(e)}")
-        data['50_day_ma'] = data['current_price'] * 0.95
-        data['200_day_ma'] = data['current_price'] * 0.9
-        data['rsi'] = 50.0
-    
-    # Defaults
-    data['beta'] = 1.5
-    data['desired_return'] = 15.0
-    data['margin_of_safety'] = 25.0
-    data['monte_carlo_runs'] = 1000
-    data['volatility_adj'] = 30.0
-    data['growth_adj'] = 20.0
-    data['s2f_intercept'] = 14.6  # Default S2F intercept
-    data['s2f_slope'] = 0.05      # Default S2F slope
-    data['metcalfe_coeff'] = 0.0001  # Default Metcalfe coefficient
-    data['block_reward'] = 6.25   # Current block reward
-    data['blocks_per_day'] = 144  # Approx blocks per day
-    
-    return data
+        logging.error(f"Error in valuation: {str(e)}")
+        return {'intrinsic_value': 0, 'error': f'Calculation failed: {str(e)}'}
 
-@st.cache_data(ttl=86400)
-@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
-def fetch_history(period='5y'):
-    """
-    Fetch historical price and on-chain data for Bitcoin.
-    """
-    try:
-        df = yf.download('BTC-USD', period=period)
-        for metric in ['n-unique-addresses', 'estimated-transaction-volume-usd', 'mvrv', 'sopr', 'puell_multiple']:
-            try:
-                url = f"https://api.blockchain.info/charts/{metric}?format=json&timespan={period}"
-                headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
-                response = requests.get(url, headers=headers).json()
-                values = pd.DataFrame(response['values'])
-                values['x'] = pd.to_datetime(values['x'], unit='s')
-                values.set_index('x', inplace=True)
-                df[metric] = values['y'].reindex(df.index, method='ffill')
-            except Exception as e:
-                logging.error(f"Error fetching historical {metric}: {str(e)}")
-                df[metric] = 0.0
-        return df
-    except Exception as e:
-        logging.error(f"Error fetching historical data: {str(e)}")
-        st.warning("Unable to fetch historical data.")
-        return pd.DataFrame()
+def get_verdict(undervaluation):
+    """Determine buy/sell/hold verdict."""
+    if undervaluation > 20:
+        return "Strong Buy"
+    elif undervaluation > 0:
+        return "Buy"
+    elif undervaluation > -20:
+        return "Hold"
+    else:
+        return "Sell"
+
+def calculate_score(inputs, results):
+    """Calculate an overall score based on metrics."""
+    score = 50
+    if results['undervaluation'] > 0:
+        score += min(results['undervaluation'], 30)
+    if inputs['fear_greed'] < 25:
+        score += 10
+    elif inputs['fear_greed'] > 75:
+        score -= 10
+    if inputs['sopr'] < 1:
+        score += 10
+    if inputs['puell_multiple'] < 0.5:
+        score += 10
+    return max(min(score, 100), 0)
+
+def s2f_model(inputs):
+    """Stock-to-Flow model: price based on scarcity."""
+    history = fetch_history(period='5y')
+    coeffs = calibrate_s2f(history, inputs['s2f_intercept'], inputs['s2f_slope'])
+    stock = inputs['circulating_supply']
+    flow = inputs['block_reward'] * inputs['blocks_per_day'] * 365
+    sf = stock / flow if flow > 0 else 100
+    intrinsic_value = np.exp(coeffs[0] + coeffs[1] * sf) * (1 - inputs['volatility_adj'] / 100)
+    return {'intrinsic_value': intrinsic_value}
+
+def metcalfe_law(inputs):
+    """Metcalfe's Law: value proportional to square of active addresses."""
+    n = inputs['active_addresses']
+    intrinsic_value = (n ** 2) * inputs['metcalfe_coeff'] * (1 - inputs['volatility_adj'] / 100)
+    return {'intrinsic_value': intrinsic_value}
+
+def nvt_model(inputs):
+    """NVT: market cap to transaction volume, benchmarked to historical avg."""
+    nvt = inputs['market_cap'] / inputs['transaction_volume'] if inputs['transaction_volume'] > 0 else 50
+    intrinsic_value = inputs['current_price'] * (50 / nvt) * (1 - inputs['volatility_adj'] / 100)
+    return {'intrinsic_value': intrinsic_value}
+
+def pi_cycle(inputs):
+    """Pi Cycle Top: uses 111-day and 350-day MAs."""
+    ma_111 = inputs['50_day_ma'] * 1.1
+    ma_350 = inputs['200_day_ma'] * 1.2
+    intrinsic_value = ma_111 if inputs['current_price'] > ma_350 else inputs['current_price']
+    intrinsic_value *= (1 - inputs['volatility_adj'] / 100)
+    return {'intrinsic_value': intrinsic_value}
+
+def reverse_s2f(inputs):
+    """Reverse S2F: implied growth to reach current price."""
+    history = fetch_history(period='5y')
+    coeffs = calibrate_s2f(history, inputs['s2f_intercept'], inputs['s2f_slope'])
+    stock = inputs['circulating_supply']
+    flow = inputs['block_reward'] * inputs['blocks_per_day'] * 365
+    sf = stock / flow if flow > 0 else 100
+    target_price = inputs['current_price']
+    implied_sf = (np.log(target_price) - coeffs[0]) / coeffs[1]
+    intrinsic_value = target_price * (1 - inputs['volatility_adj'] / 100)
+    return {'intrinsic_value': intrinsic_value, 'implied_sf': implied_sf}
