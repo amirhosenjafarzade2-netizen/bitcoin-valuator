@@ -20,9 +20,10 @@ def get_yfinance_ticker(symbol):
 
 @st.cache_data(ttl=300)
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
-def fetch_bitcoin_data():
+def fetch_bitcoin_data(electricity_cost=0.05):
     """
     Fetch Bitcoin data from various sources.
+    electricity_cost: Cost per kWh for mining cost estimation ($/kWh).
     Returns a dictionary with relevant metrics.
     """
     data = {}
@@ -78,11 +79,11 @@ def fetch_bitcoin_data():
     data['realized_cap'] = data['market_cap'] / data['mvrv'] if data['mvrv'] > 0 else 6e11
     
     # Mining cost estimation
-    def estimate_mining_cost(hash_rate):
-        electricity_cost = 0.05  # $/kWh
+    def estimate_mining_cost(hash_rate, electricity_cost):
         power_consumption = hash_rate * 1000  # Simplified
         return power_consumption * electricity_cost * 24 * 365 / (6.25 * 144)
-    data['mining_cost'] = estimate_mining_cost(data['hash_rate'])
+    data['mining_cost'] = estimate_mining_cost(data['hash_rate'], electricity_cost)
+    data['electricity_cost'] = electricity_cost  # Store for UI
     
     # Next halving
     try:
@@ -174,6 +175,11 @@ def fetch_bitcoin_data():
     data['monte_carlo_runs'] = 1000
     data['volatility_adj'] = 30.0
     data['growth_adj'] = 20.0
+    data['s2f_intercept'] = 14.6  # Default S2F intercept
+    data['s2f_slope'] = 0.05      # Default S2F slope
+    data['metcalfe_coeff'] = 0.0001  # Default Metcalfe coefficient
+    data['block_reward'] = 6.25   # Current block reward
+    data['blocks_per_day'] = 144  # Approx blocks per day
     
     return data
 
