@@ -70,7 +70,7 @@ with tab1:
             help="Select a model to analyze Bitcoin."
         )
         
-        use_fetched_data = st.checkbox("Use Fetched Data", value=True, help="Use API-fetched data instead of manual inputs")
+        use_fetched_data = st.checkbox("Initialize with Fetched Data", value=True, help="Initialize inputs with API-fetched data (uncheck to use defaults)")
         
         with st.expander("Fetched Data Overview"):
             st.write("All Metrics (Fetched or Default):")
@@ -83,50 +83,81 @@ with tab1:
                     st.write(f"- {key.replace('_', ' ').title()}: {value}")
         
         with st.expander("Core Inputs"):
+            st.write(f"Fetched Current Price: ${float(data.get('current_price', 60000.0)):.2f}")
             current_price = st.number_input("Current Price (USD)", min_value=0.01, value=float(data.get('current_price', 60000.0)) if use_fetched_data else 60000.0, help="Current BTC price in USD")
+            st.write(f"Fetched Total Supply: {float(data.get('total_supply', 21000000.0)):.0f} BTC")
             total_supply = st.number_input("Total Supply (BTC)", min_value=0.0, value=float(data.get('total_supply', 21000000.0)) if use_fetched_data else 21000000.0, help="Maximum BTC supply")
+            st.write(f"Fetched Circulating Supply: {float(data.get('circulating_supply', 19700000.0)):.0f} BTC")
             circulating_supply = st.number_input("Circulating Supply (BTC)", min_value=0.0, value=float(data.get('circulating_supply', 19700000.0)) if use_fetched_data else 19700000.0, help="Current circulating BTC")
+            st.write(f"Fetched Next Halving Date: {data.get('next_halving_date', datetime(2028, 4, 1)).strftime('%Y-%m-%d')}")
             next_halving_date = st.date_input("Next Halving Date", value=data.get('next_halving_date', datetime(2028, 4, 1)) if use_fetched_data else datetime(2028, 4, 1), help="Estimated date of next halving")
             margin_of_safety = st.number_input("Margin of Safety (%)", min_value=0.0, max_value=100.0, value=float(data.get('margin_of_safety', 25.0)) if use_fetched_data else 25.0, help="Discount for risk (0-100%)")
         
         with st.expander("On-Chain Inputs"):
+            st.write(f"Fetched Hash Rate: {float(data.get('hash_rate', 500.0)):.2f} EH/s")
             hash_rate = st.number_input("Hash Rate (EH/s)", min_value=0.0, value=float(data.get('hash_rate', 500.0)) if use_fetched_data else 500.0, help="Network hash rate")
+            st.write(f"Fetched Active Addresses: {float(data.get('active_addresses', 1000000.0)):.0f}")
             active_addresses = st.number_input("Active Addresses (Daily)", min_value=0.0, value=float(data.get('active_addresses', 1000000.0)) if use_fetched_data else 1000000.0, help="Daily active wallet addresses")
+            st.write(f"Fetched Transaction Volume: ${float(data.get('transaction_volume', 1e9)):.2e}")
             transaction_volume = st.number_input("Transaction Volume (USD, Daily)", min_value=0.0, value=float(data.get('transaction_volume', 1e9)) if use_fetched_data else 1e9, help="Daily USD transaction volume")
+            st.write(f"Fetched MVRV: {float(data.get('mvrv', 2.0)):.2f}")
             mvrv = st.number_input("MVRV Ratio", min_value=0.0, value=float(data.get('mvrv', 2.0)) if use_fetched_data else 2.0, help="Market Value to Realized Value")
+            st.write(f"Fetched SOPR: {float(data.get('sopr', 1.0)):.2f}")
             sopr = st.number_input("SOPR", min_value=0.0, value=float(data.get('sopr', 1.0)) if use_fetched_data else 1.0, help="Spent Output Profit Ratio (~1)")
+            st.write(f"Fetched Realized Cap: ${float(data.get('realized_cap', 6e11)):.2e}")
             realized_cap = st.number_input("Realized Cap (USD)", min_value=0.0, value=float(data.get('realized_cap', 6e11)) if use_fetched_data else 6e11, help="Total value of all BTC at purchase price")
+            st.write(f"Fetched Puell Multiple: {float(data.get('puell_multiple', 1.0)):.2f}")
             puell_multiple = st.number_input("Puell Multiple", min_value=0.0, value=float(data.get('puell_multiple', 1.0)) if use_fetched_data else 1.0, help="Miners' revenue vs historical avg (0.3-5)")
+            st.write(f"Fetched Electricity Cost: ${float(data.get('electricity_cost', 0.05)):.2f}/kWh")
             electricity_cost = st.number_input("Electricity Cost ($/kWh)", min_value=0.0, max_value=1.0, value=float(data.get('electricity_cost', 0.05)) if use_fetched_data else 0.05, help="Cost per kWh for mining cost estimation")
+            st.write(f"Fetched Block Reward: {float(data.get('block_reward', 6.25)):.2f} BTC")
             block_reward = st.number_input("Block Reward (BTC)", min_value=0.0, max_value=50.0, value=float(data.get('block_reward', 6.25)) if use_fetched_data else 6.25, help="Current block reward per block")
+            st.write(f"Fetched Blocks Per Day: {float(data.get('blocks_per_day', 144.0)):.0f}")
             blocks_per_day = st.number_input("Blocks Per Day", min_value=100.0, max_value=200.0, value=float(data.get('blocks_per_day', 144.0)) if use_fetched_data else 144.0, help="Approx blocks mined per day")
         
         with st.expander("Model-Specific Inputs"):
+            st.write(f"Fetched S2F Intercept: {float(data.get('s2f_intercept', 14.6)):.2f}")
             s2f_intercept = st.number_input("S2F Intercept", min_value=0.0, max_value=100.0, value=float(data.get('s2f_intercept', 14.6)) if use_fetched_data else 14.6, help="S2F model intercept")
+            st.write(f"Fetched S2F Slope: {float(data.get('s2f_slope', 0.05)):.2f}")
             s2f_slope = st.number_input("S2F Slope", min_value=0.0, max_value=1.0, value=float(data.get('s2f_slope', 0.05)) if use_fetched_data else 0.05, help="S2F model slope")
+            st.write(f"Fetched Metcalfe Coefficient: {float(data.get('metcalfe_coeff', 0.0001)):.4f}")
             metcalfe_coeff = st.number_input("Metcalfe Coefficient", min_value=0.0, max_value=0.01, value=float(data.get('metcalfe_coeff', 0.0001)) if use_fetched_data else 0.0001, help="Scaling factor for Metcalfe's Law")
         
         with st.expander("Sentiment Inputs"):
+            st.write(f"Fetched Fear & Greed: {int(data.get('fear_greed', 50))}")
             fear_greed = st.number_input("Fear & Greed Index (0-100)", min_value=0, max_value=100, value=int(data.get('fear_greed', 50)) if use_fetched_data else 50, help="0=Extreme Fear, 100=Extreme Greed")
+            st.write(f"Fetched Social Volume: {float(data.get('social_volume', 10000.0)):.0f}")
             social_volume = st.number_input("Social Volume (Mentions/Day)", min_value=0.0, value=float(data.get('social_volume', 10000.0)) if use_fetched_data else 10000.0, help="Social media mentions")
+            st.write(f"Fetched Sentiment Score: {float(data.get('sentiment_score', 0.5)):.2f}")
             sentiment_score = st.number_input("Sentiment Score (-1 to 1)", min_value=-1.0, max_value=1.0, value=float(data.get('sentiment_score', 0.5)) if use_fetched_data else 0.5, help="Positive=Bullish, Negative=Bearish")
         
         with st.expander("Macro Inputs"):
+            st.write(f"Fetched US Inflation: {float(data.get('us_inflation', 3.0)):.2f}%")
             us_inflation = st.number_input("US Inflation Rate (%)", min_value=0.0, max_value=50.0, value=float(data.get('us_inflation', 3.0)) if use_fetched_data else 3.0, help="Annual US inflation rate")
+            st.write(f"Fetched Fed Rate: {float(data.get('fed_rate', 5.0)):.2f}%")
             fed_rate = st.number_input("Fed Interest Rate (%)", min_value=0.0, max_value=50.0, value=float(data.get('fed_rate', 5.0)) if use_fetched_data else 5.0, help="Federal Reserve interest rate")
+            st.write(f"Fetched S&P 500 Correlation: {float(data.get('sp_correlation', 0.5)):.2f}")
             sp_correlation = st.number_input("S&P 500 Correlation (0-1)", min_value=0.0, max_value=1.0, value=float(data.get('sp_correlation', 0.5)) if use_fetched_data else 0.5, help="BTC-S&P 500 correlation")
+            st.write(f"Fetched Gold Price: ${float(data.get('gold_price', 2000.0)):.2f}")
             gold_price = st.number_input("Gold Price (USD/oz)", min_value=0.0, value=float(data.get('gold_price', 2000.0)) if use_fetched_data else 2000.0, help="Gold price for comparison")
         
         with st.expander("Technical Inputs"):
+            st.write(f"Fetched RSI: {float(data.get('rsi', 50.0)):.2f}")
             rsi = st.number_input("RSI (14-day)", min_value=0.0, max_value=100.0, value=float(data.get('rsi', 50.0)) if use_fetched_data else 50.0, help="Overbought >70, Oversold <30")
+            st.write(f"Fetched 50-Day MA: ${float(data.get('50_day_ma', 57000.0)):.2f}")
             ma_50 = st.number_input("50-Day MA", min_value=0.0, value=float(data.get('50_day_ma', 57000.0)) if use_fetched_data else 57000.0, help="50-day moving average")
+            st.write(f"Fetched 200-Day MA: ${float(data.get('200_day_ma', 54000.0)):.2f}")
             ma_200 = st.number_input("200-Day MA", min_value=0.0, value=float(data.get('200_day_ma', 54000.0)) if use_fetched_data else 54000.0, help="200-day moving average")
         
         with st.expander("Monte Carlo Settings"):
+            st.write(f"Fetched Monte Carlo Runs: {int(data.get('monte_carlo_runs', 1000))}")
             monte_carlo_runs = st.number_input("Number of Runs", min_value=100, max_value=2000, value=int(data.get('monte_carlo_runs', 1000)) if use_fetched_data else 1000, help="100-2000 runs")
+            st.write(f"Fetched Volatility Adjustment: {float(data.get('volatility_adj', 30.0)):.2f}%")
             volatility_adj = st.number_input("Volatility Adjustment Range (±%)", min_value=0.0, max_value=50.0, value=float(data.get('volatility_adj', 30.0)) if use_fetched_data else 30.0, help="Volatility variation")
+            st.write(f"Fetched Growth Adjustment: {float(data.get('growth_adj', 20.0)):.2f}%")
             growth_adj = st.number_input("Growth Adjustment Range (±%)", min_value=0.0, max_value=50.0, value=float(data.get('growth_adj', 20.0)) if use_fetched_data else 20.0, help="Growth rate variation")
         
+        st.write(f"Fetched Beta: {float(data.get('beta', 1.5)):.2f}")
         beta = st.number_input("Beta (vs. Market)", min_value=0.0, value=float(data.get('beta', 1.5)) if use_fetched_data else 1.5, help="BTC's market risk vs S&P 500")
         
         if st.button("Clear Cache"):
@@ -183,35 +214,45 @@ with tab1:
                     'electricity_cost': electricity_cost
                 }
                 
-                if validate_inputs(inputs):
-                    results = calculate_valuation(inputs)
-                    st.session_state.results = results
-                    st.session_state.data = inputs
-                    
-                    st.metric("Score", f"{results.get('score', 0)}/100")
-                    st.metric("Model", results.get('model', '-'))
-                    st.metric("Current Price", f"${results.get('current_price', 0):.2f}")
-                    st.metric("Intrinsic Value (Today)", f"${results.get('intrinsic_value', 0):.2f}")
-                    st.metric("Safe Buy Price (after MOS)", f"${results.get('safe_buy_price', 0):.2f}")
-                    st.metric("Undervaluation %", f"{results.get('undervaluation', 0):.2f}%")
-                    st.metric("NVT Ratio", f"{results.get('nvt_ratio', 0):.2f}")
-                    st.metric("MVRV Z-Score", f"{results.get('mvrv_z_score', 0):.2f}")
-                    st.metric("SOPR Signal", results.get('sopr_signal', '-'))
-                    st.metric("Puell Multiple Signal", results.get('puell_signal', '-'))
-                    st.metric("Mining Cost vs Price", f"{results.get('mining_cost_vs_price', 0):.2f}%")
-                    st.metric("Overall Score", f"{results.get('score', 0)}/100")
-                    st.metric("Verdict", results.get('verdict', '-'))
-                    st.metric("S2F Projected Value", f"${results.get('s2f_value', 0):.2f}")
-                    st.metric("Metcalfe Value", f"${results.get('metcalfe_value', 0):.2f}")
-                    st.metric("NVT Value", f"${results.get('nvt_value', 0):.2f}")
-                    st.metric("Pi Cycle Value", f"${results.get('pi_cycle_value', 0):.2f}")
-                    st.metric("Reverse S2F Value", f"${results.get('reverse_s2f_value', 0):.2f}")
-                    st.metric("MSC Value", f"${results.get('msc_value', 0):.2f}")
-                    st.metric("Energy Value", f"${results.get('energy_value', 0):.2f}")
-                    st.metric("RVMR Value", f"${results.get('rvmr_value', 0):.2f}")
-                    st.metric("Mayer Multiple", f"{results.get('mayer_multiple', 0):.2f}")
-                    st.metric("Hash Ribbons Signal", results.get('hash_ribbon_signal', '-'))
-                    st.metric("Macro Monetary Value", f"${results.get('macro_monetary_value', 0):.2f}")
+                logging.info(f"Inputs for valuation: {inputs}")
+                if not validate_inputs(inputs):
+                    st.error("Invalid inputs. Check values (e.g., no negative numbers, non-zero supply). See logs for details.")
+                    logging.error(f"Validation failed for inputs: {inputs}")
+                else:
+                    try:
+                        st.session_state.results = {}  # Reset results
+                        results = calculate_valuation(inputs)
+                        st.session_state.results = results
+                        st.session_state.data = inputs
+                        logging.info(f"Valuation results: {results}")
+                        
+                        st.metric("Score", f"{results.get('score', 0)}/100")
+                        st.metric("Model", results.get('model', '-'))
+                        st.metric("Current Price", f"${results.get('current_price', 0):.2f}")
+                        st.metric("Intrinsic Value (Today)", f"${results.get('intrinsic_value', 0):.2f}")
+                        st.metric("Safe Buy Price (after MOS)", f"${results.get('safe_buy_price', 0):.2f}")
+                        st.metric("Undervaluation %", f"{results.get('undervaluation', 0):.2f}%")
+                        st.metric("NVT Ratio", f"{results.get('nvt_ratio', 0):.2f}")
+                        st.metric("MVRV Z-Score", f"{results.get('mvrv_z_score', 0):.2f}")
+                        st.metric("SOPR Signal", results.get('sopr_signal', '-'))
+                        st.metric("Puell Multiple Signal", results.get('puell_signal', '-'))
+                        st.metric("Mining Cost vs Price", f"{results.get('mining_cost_vs_price', 0):.2f}%")
+                        st.metric("Overall Score", f"{results.get('score', 0)}/100")
+                        st.metric("Verdict", results.get('verdict', '-'))
+                        st.metric("S2F Projected Value", f"${results.get('s2f_value', 0):.2f}")
+                        st.metric("Metcalfe Value", f"${results.get('metcalfe_value', 0):.2f}")
+                        st.metric("NVT Value", f"${results.get('nvt_value', 0):.2f}")
+                        st.metric("Pi Cycle Value", f"${results.get('pi_cycle_value', 0):.2f}")
+                        st.metric("Reverse S2F Value", f"${results.get('reverse_s2f_value', 0):.2f}")
+                        st.metric("MSC Value", f"${results.get('msc_value', 0):.2f}")
+                        st.metric("Energy Value", f"${results.get('energy_value', 0):.2f}")
+                        st.metric("RVMR Value", f"${results.get('rvmr_value', 0):.2f}")
+                        st.metric("Mayer Multiple", f"{results.get('mayer_multiple', 0):.2f}")
+                        st.metric("Hash Ribbons Signal", results.get('hash_ribbon_signal', '-'))
+                        st.metric("Macro Monetary Value", f"${results.get('macro_monetary_value', 0):.2f}")
+                    except Exception as e:
+                        st.error(f"Valuation calculation failed: {str(e)}. Check logs for details.")
+                        logging.error(f"Valuation error: {str(e)}")
     
     with col_right:
         st.header("Portfolio Overview")
@@ -220,7 +261,7 @@ with tab1:
         st.metric("Portfolio Beta", f"{portfolio_beta:.2f}")
         st.metric("Portfolio Expected Return", f"{expected_return:.2f}%")
         
-        if add_to_portfolio and 'results' in st.session_state:
+        if add_to_portfolio and 'results' in st.session_state and st.session_state.results:
             new_row = pd.DataFrame([{
                 'Asset': 'BTC',
                 'Intrinsic Value': st.session_state.results.get('intrinsic_value', 0),
@@ -235,7 +276,7 @@ with tab1:
         if export:
             export_portfolio(st.session_state.portfolio)
         
-        if download_report and 'results' in st.session_state:
+        if download_report and 'results' in st.session_state and st.session_state.results:
             model_comp = pd.DataFrame({
                 'Model': ['S2F', 'Metcalfe', 'NVT', 'Pi Cycle', 'Reverse S2F', 'MSC', 'Energy', 'RVMR', 'Mayer', 'Hash Ribbons', 'Macro Monetary'],
                 'Intrinsic Value': [
@@ -282,13 +323,13 @@ with tab1:
         st.dataframe(scenarios, use_container_width=True)
         
         st.header("Sensitivity Analysis (Heatmap)")
-        if 'results' in st.session_state:
+        if 'results' in st.session_state and st.session_state.results:
             heatmap = plot_heatmap(st.session_state.results.get('intrinsic_value', 0), volatility_adj, growth_adj)
             if heatmap:
                 st.plotly_chart(heatmap, use_container_width=True)
         
         st.header("Monte Carlo Simulation")
-        if 'results' in st.session_state:
+        if 'results' in st.session_state and st.session_state.results:
             with st.spinner("Running Monte Carlo simulation..."):
                 with ThreadPoolExecutor() as executor:
                     mc_results = executor.submit(run_monte_carlo, st.session_state.data, monte_carlo_runs, volatility_adj, growth_adj).result()
@@ -300,7 +341,7 @@ with tab1:
                 st.plotly_chart(mc_plot, use_container_width=True)
         
         st.header("Model Comparison")
-        if 'results' in st.session_state:
+        if 'results' in st.session_state and st.session_state.results:
             model_comp = pd.DataFrame({
                 'Model': ['S2F', 'Metcalfe', 'NVT', 'Pi Cycle', 'Reverse S2F', 'MSC', 'Energy', 'RVMR', 'Mayer', 'Hash Ribbons', 'Macro Monetary'],
                 'Intrinsic Value': [
