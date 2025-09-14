@@ -22,7 +22,7 @@ def get_yfinance_ticker(symbol):
 @retry(stop=stop_after_attempt(5), wait=wait_exponential(multiplier=1, min=4, max=10))
 def fetch_bitcoin_data(electricity_cost=0.05):
     """
-    Fetch Bitcoin data from CoinGecko, CoinMarketCap, or Kraken (in order).
+    Fetch Bitcoin data from CoinGecko, CoinMarketCap, Kraken, or Binance (in order).
     electricity_cost: Cost per kWh for mining cost estimation ($/kWh).
     Returns a dictionary with relevant metrics.
     """
@@ -48,6 +48,7 @@ def fetch_bitcoin_data(electricity_cost=0.05):
         data['sentiment_score'] = (up - down) / 100 if up and down else 0.0
         logging.info("Successfully fetched data from CoinGecko")
         st.success("Fetched market data from CoinGecko")
+        return data  # Return early if successful
     
     except Exception as e:
         logging.error(f"CoinGecko failed: {str(e)}")
@@ -66,11 +67,12 @@ def fetch_bitcoin_data(electricity_cost=0.05):
             data['total_volume'] = btc_data['quote']['USD']['volume_24h']
             data['circulating_supply'] = btc_data['circulating_supply']
             data['total_supply'] = btc_data['max_supply'] or 21000000
-            data['social_volume'] = 10000  # No direct equivalent
-            data['sentiment_score'] = 0.5  # No direct equivalent
+            data['social_volume'] = 10000
+            data['sentiment_score'] = 0.5
             logging.info("Successfully fetched data from CoinMarketCap")
             st.success("Fetched market data from CoinMarketCap")
-        
+            return data
+    
         except Exception as e:
             logging.error(f"CoinMarketCap failed: {str(e)}")
             st.warning("CoinMarketCap failed. Trying Kraken...")
@@ -79,28 +81,59 @@ def fetch_bitcoin_data(electricity_cost=0.05):
             try:
                 kraken_url = "https://api.kraken.com/0/public/Ticker?pair=XBTUSD"
                 kraken_response = requests.get(kraken_url, headers=headers, timeout=10).json()
+                if kraken_response.get('error'):
+                    raise Exception(f"Kraken error: {kraken_response['error']}")
                 btc_data = kraken_response['result']['XXBTZUSD']
+                price = float(btc_data['c'][0])
+                if price <= 0:
+                    raise Exception("Invalid Kraken price")
                 
-                data['current_price'] = float(btc_data['c'][0])
-                data['market_cap'] = float(btc_data['c'][0]) * 19700000  # Approximate circulating supply
-                data['total_volume'] = float(btc_data['v'][1]) * float(btc_data['c'][0])  # 24h volume
+                data['current_price'] = price
+                data['market_cap'] = price * 19700000
+                data['total_volume'] = float(btc_data['v'][1]) * price
                 data['circulating_supply'] = 19700000
                 data['total_supply'] = 21000000
                 data['social_volume'] = 10000
                 data['sentiment_score'] = 0.5
-                logging.info("Successfully fetched data from Kraken")
-                st.success("Fetched market data from Kraken")
+                logging.info(f"Successfully fetched data from Kraken: price={price}")
+                st.success(f"Fetched market data from Kraken: ${price:.2f}")
+                return data
             
             except Exception as e:
                 logging.error(f"Kraken failed: {str(e)}")
-                st.error("Unable to fetch market data from all sources. Using defaults. Check API keys or network.")
-                data['current_price'] = 60000.0
-                data['market_cap'] = 1.2e12
-                data['total_volume'] = 5e10
-                data['circulating_supply'] = 19700000
-                data['total_supply'] = 21000000
-                data['social_volume'] = 10000
-                data['sentiment_score'] = 0.5
+                st.warning("Kraken failed. Trying Binance...")
+                
+                # Try Binance
+                try:
+                    binance_url = "https://api.binance.com/api/v3/ticker/24hr?symbol=BTCUSDT"
+                    binance_response = requests.get(binance_url, headers=headers, timeout=10).json()
+                    if 'code' in binance_response:
+                        raise Exception(f"Binance error: {binance_response['msg']}")
+                    price = float(binance_response['lastPrice'])
+                    if price <= 0:
+                        raise Exception("Invalid Binance price")
+                    
+                    data['current_price'] = price
+                    data['market_cap'] = price * 19700000
+                    data['total_volume'] = float(binance_response['volume']) * price
+                    data['circulating_supply'] = 19700000
+                    data['total_supply'] = 21000000
+                    data['social_volume'] = 10000
+                    data['sentiment_score'] = 0.5
+                    logging.info(f"Successfully fetched data from Binance: price={price}")
+                    st.success(f"Fetched market data from Binance: ${price:.2f}")
+                    return data
+                
+                except Exception as e:
+                    logging.error(f"Binance failed: {str(e)}")
+                    st.error("Unable to fetch market data from all sources. Using defaults. Check API keys or network.")
+                    data['current_price'] = 60000.0
+                    data['market_cap'] = 1.2e12
+                    data['total_volume'] = 5e10
+                    data['circulating_supply'] = 19700000
+                    data['total_supply'] = 21000000
+                    data['social_volume'] = 10000
+                    data['sentiment_score'] = 0.5
     
     # Blockchain.com for on-chain
     @retry(stop=stop_after_attempt(5), wait=wait_exponential(multiplier=1, min=4, max=10))
