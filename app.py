@@ -55,13 +55,14 @@ with tab1:
             - **RVMR**: Realized cap vs miner revenue for mining economics.
             - **Mayer Multiple**: Price relative to 200-day MA for fair value.
             - **Hash Ribbons**: Hash rate MAs for miner capitulation signals.
+            - **Macro Monetary Model**: Adjusts Metcalfe's value by inflation and real rates.
             """)
         
         model = st.selectbox(
             "Valuation Model",
             ["Stock-to-Flow (S2F)", "Metcalfe's Law", "Network Value to Transactions (NVT)", 
              "Pi Cycle Top Indicator", "Reverse S2F", "Market Sentiment Composite (MSC)",
-             "Bitcoin Energy Value Model", "RVMR", "Mayer Multiple", "Hash Ribbons"],
+             "Bitcoin Energy Value Model", "RVMR", "Mayer Multiple", "Hash Ribbons", "Macro Monetary Model"],
             help="Select a model to analyze Bitcoin."
         )
         
@@ -201,6 +202,7 @@ with tab1:
                     st.metric("RVMR Value", f"${results.get('rvmr_value', 0):.2f}")
                     st.metric("Mayer Multiple", f"{results.get('mayer_multiple', 0):.2f}")
                     st.metric("Hash Ribbons Signal", results.get('hash_ribbon_signal', '-'))
+                    st.metric("Macro Monetary Value", f"${results.get('macro_monetary_value', 0):.2f}")
     
     with col_right:
         st.header("Portfolio Overview")
@@ -226,7 +228,7 @@ with tab1:
         
         if download_report and 'results' in st.session_state:
             model_comp = pd.DataFrame({
-                'Model': ['S2F', 'Metcalfe', 'NVT', 'Pi Cycle', 'Reverse S2F', 'MSC', 'Energy', 'RVMR', 'Mayer', 'Hash Ribbons'],
+                'Model': ['S2F', 'Metcalfe', 'NVT', 'Pi Cycle', 'Reverse S2F', 'MSC', 'Energy', 'RVMR', 'Mayer', 'Hash Ribbons', 'Macro Monetary'],
                 'Intrinsic Value': [
                     st.session_state.results.get('s2f_value', 0),
                     st.session_state.results.get('metcalfe_value', 0),
@@ -237,7 +239,8 @@ with tab1:
                     st.session_state.results.get('energy_value', 0),
                     st.session_state.results.get('rvmr_value', 0),
                     st.session_state.results.get('mayer_multiple_value', 0),
-                    st.session_state.results.get('hash_ribbons_value', 0)
+                    st.session_state.results.get('hash_ribbons_value', 0),
+                    st.session_state.results.get('macro_monetary_value', 0)
                 ]
             })
             model_comp_fig = plot_model_comparison(model_comp)
@@ -290,7 +293,7 @@ with tab1:
         st.header("Model Comparison")
         if 'results' in st.session_state:
             model_comp = pd.DataFrame({
-                'Model': ['S2F', 'Metcalfe', 'NVT', 'Pi Cycle', 'Reverse S2F', 'MSC', 'Energy', 'RVMR', 'Mayer', 'Hash Ribbons'],
+                'Model': ['S2F', 'Metcalfe', 'NVT', 'Pi Cycle', 'Reverse S2F', 'MSC', 'Energy', 'RVMR', 'Mayer', 'Hash Ribbons', 'Macro Monetary'],
                 'Intrinsic Value': [
                     st.session_state.results.get('s2f_value', 0),
                     st.session_state.results.get('metcalfe_value', 0),
@@ -301,7 +304,8 @@ with tab1:
                     st.session_state.results.get('energy_value', 0),
                     st.session_state.results.get('rvmr_value', 0),
                     st.session_state.results.get('mayer_multiple_value', 0),
-                    st.session_state.results.get('hash_ribbons_value', 0)
+                    st.session_state.results.get('hash_ribbons_value', 0),
+                    st.session_state.results.get('macro_monetary_value', 0)
                 ]
             })
             comp_plot = plot_model_comparison(model_comp)
