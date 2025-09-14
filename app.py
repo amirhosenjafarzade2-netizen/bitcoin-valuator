@@ -42,15 +42,39 @@ except Exception as e:
     st.error(f"Failed to fetch data: {str(e)}. Using default values.")
     logging.error(f"Data fetch error: {str(e)}")
     data = {
-        'current_price': 60000.0, 'total_supply': 21000000.0, 'circulating_supply': 19700000.0,
-        'next_halving_date': datetime(2028, 4, 1), 'margin_of_safety': 25.0, 'hash_rate': 500.0,
-        'active_addresses': 1000000.0, 'transaction_volume': 1e9, 'mvrv': 2.0, 'sopr': 1.0,
-        'realized_cap': 6e11, 'puell_multiple': 1.0, 'mining_cost': 10000.0, 'fear_greed': 50,
-        'social_volume': 10000.0, 'sentiment_score': 0.5, 'us_inflation': 3.0, 'fed_rate': 5.0,
-        'sp_correlation': 0.5, 'gold_price': 2000.0, 'rsi': 50.0, '50_day_ma': 57000.0,
-        '200_day_ma': 54000.0, 'desired_return': 15.0, 'monte_carlo_runs': 1000,
-        'volatility_adj': 30.0, 'growth_adj': 20.0, 'beta': 1.5, 's2f_intercept': 14.6,
-        's2f_slope': 0.05, 'metcalfe_coeff': 0.0001, 'block_reward': 3.125, 'blocks_per_day': 144.0,
+        'current_price': 65000.0,  # Realistic for Sep 2025
+        'total_supply': 21000000.0,
+        'circulating_supply': 19700000.0,
+        'next_halving_date': datetime(2028, 4, 1),
+        'margin_of_safety': 25.0,
+        'hash_rate': 550.0,
+        'active_addresses': 900000.0,
+        'transaction_volume': 2e9,
+        'mvrv': 2.0,
+        'sopr': 1.0,
+        'realized_cap': 6.5e11,
+        'puell_multiple': 1.0,
+        'mining_cost': 10000.0,
+        'fear_greed': 50,
+        'social_volume': 10000.0,
+        'sentiment_score': 0.5,
+        'us_inflation': 2.8,
+        'fed_rate': 4.75,
+        'sp_correlation': 0.5,
+        'gold_price': 2200.0,
+        'rsi': 50.0,
+        '50_day_ma': 62000.0,
+        '200_day_ma': 58000.0,
+        'desired_return': 15.0,
+        'monte_carlo_runs': 1000,
+        'volatility_adj': 10.0,  # Reduced for realistic impact
+        'growth_adj': 20.0,
+        'beta': 1.5,
+        's2f_intercept': -1.84,  # PlanB's ln(sf) model
+        's2f_slope': 3.96,  # PlanB's ln(sf) model
+        'metcalfe_coeff': 1.0,  # Adjusted for ~$50,000-$70,000/BTC
+        'block_reward': 3.125,  # Post-2024 halving
+        'blocks_per_day': 144.0,
         'electricity_cost': 0.05
     }
 
@@ -101,11 +125,11 @@ with tab1:
                     st.write(f"- {key.replace('_', ' ').title()}: {value}")
         
         with st.expander("Core Inputs"):
-            current_price_fetched = float(data.get('current_price', 60000.0))
+            current_price_fetched = float(data.get('current_price', 65000.0))
             st.write(f"Fetched Current Price: ${current_price_fetched:.2f} (Kraken, expect $60,000-$65,000)")
             if current_price_fetched < 10000 or current_price_fetched > 100000:
                 st.warning("Current price seems unusual. Verify and edit if needed.")
-            current_price = st.number_input("Current Price (USD)", min_value=0.01, value=current_price_fetched if use_fetched_data else 60000.0, help="Current BTC price in USD (Kraken)")
+            current_price = st.number_input("Current Price (USD)", min_value=0.01, value=current_price_fetched if use_fetched_data else 65000.0, help="Current BTC price in USD (Kraken)")
             
             total_supply_fetched = float(data.get('total_supply', 21000000.0))
             st.write(f"Fetched Total Supply: {total_supply_fetched:.0f} BTC (Fixed at 21M)")
@@ -126,23 +150,23 @@ with tab1:
             margin_of_safety = st.number_input("Margin of Safety (%)", min_value=0.0, max_value=100.0, value=margin_of_safety_fetched if use_fetched_data else 25.0, help="Discount for risk (0-100%)")
         
         with st.expander("On-Chain Inputs"):
-            hash_rate_fetched = float(data.get('hash_rate', 500.0))
+            hash_rate_fetched = float(data.get('hash_rate', 550.0))
             st.write(f"Fetched Hash Rate: {hash_rate_fetched:.2f} EH/s (Blockchain.com, expect 500-600)")
             if hash_rate_fetched < 400 or hash_rate_fetched > 700:
                 st.warning("Hash rate seems unusual. Verify and edit if needed.")
-            hash_rate = st.number_input("Hash Rate (EH/s)", min_value=0.0, value=hash_rate_fetched if use_fetched_data else 500.0, help="Network hash rate (Blockchain.com)")
+            hash_rate = st.number_input("Hash Rate (EH/s)", min_value=0.0, value=hash_rate_fetched if use_fetched_data else 550.0, help="Network hash rate (Blockchain.com)")
             
-            active_addresses_fetched = float(data.get('active_addresses', 1000000.0))
+            active_addresses_fetched = float(data.get('active_addresses', 900000.0))
             st.write(f"Fetched Active Addresses: {active_addresses_fetched:.0f} (Blockchain.com, expect 800K-1M)")
             if active_addresses_fetched < 500000 or active_addresses_fetched > 1500000:
                 st.warning("Active addresses seems unusual. Verify and edit if needed.")
-            active_addresses = st.number_input("Active Addresses (Daily)", min_value=0.0, value=active_addresses_fetched if use_fetched_data else 1000000.0, help="Daily active wallet addresses (Blockchain.com)")
+            active_addresses = st.number_input("Active Addresses (Daily)", min_value=0.0, value=active_addresses_fetched if use_fetched_data else 900000.0, help="Daily active wallet addresses (Blockchain.com)")
             
-            transaction_volume_fetched = float(data.get('transaction_volume', 1e9))
+            transaction_volume_fetched = float(data.get('transaction_volume', 2e9))
             st.write(f"Fetched Transaction Volume: ${transaction_volume_fetched:.2e} (Blockchain.com, expect $1B-$5B)")
             if transaction_volume_fetched < 5e8 or transaction_volume_fetched > 1e10:
                 st.warning("Transaction volume seems unusual. Verify and edit if needed.")
-            transaction_volume = st.number_input("Transaction Volume (USD, Daily)", min_value=0.0, value=transaction_volume_fetched if use_fetched_data else 1e9, help="Daily USD transaction volume (Blockchain.com)")
+            transaction_volume = st.number_input("Transaction Volume (USD, Daily)", min_value=0.0, value=transaction_volume_fetched if use_fetched_data else 2e9, help="Daily USD transaction volume (Blockchain.com)")
             
             mvrv_fetched = float(data.get('mvrv', 2.0))
             st.write(f"Fetched MVRV: {mvrv_fetched:.2f} (Blockchain.com, expect 1.5-2.5)")
@@ -156,11 +180,11 @@ with tab1:
                 st.warning("SOPR seems unusual. Verify and edit if needed.")
             sopr = st.number_input("SOPR", min_value=0.0, value=sopr_fetched if use_fetched_data else 1.0, help="Spent Output Profit Ratio (Blockchain.com, ~1)")
             
-            realized_cap_fetched = float(data.get('realized_cap', 6e11))
+            realized_cap_fetched = float(data.get('realized_cap', 6.5e11))
             st.write(f"Fetched Realized Cap: ${realized_cap_fetched:.2e} (Blockchain.com, expect $600B-$800B)")
             if realized_cap_fetched < 4e11 or realized_cap_fetched > 1e12:
                 st.warning("Realized cap seems unusual. Verify and edit if needed.")
-            realized_cap = st.number_input("Realized Cap (USD)", min_value=0.0, value=realized_cap_fetched if use_fetched_data else 6e11, help="Total value of all BTC at purchase price (Blockchain.com)")
+            realized_cap = st.number_input("Realized Cap (USD)", min_value=0.0, value=realized_cap_fetched if use_fetched_data else 6.5e11, help="Total value of all BTC at purchase price (Blockchain.com)")
             
             puell_multiple_fetched = float(data.get('puell_multiple', 1.0))
             st.write(f"Fetched Puell Multiple: {puell_multiple_fetched:.2f} (Blockchain.com, expect 0.5-1.5)")
@@ -181,19 +205,23 @@ with tab1:
             blocks_per_day = st.number_input("Blocks Per Day", min_value=100.0, max_value=200.0, value=blocks_per_day_fetched if use_fetched_data else 144.0, help="Approx blocks mined per day (Blockchain.com)")
         
         with st.expander("Model-Specific Inputs"):
-            s2f_intercept_fetched = float(data.get('s2f_intercept', 14.6))
-            st.write(f"Fetched S2F Intercept: {s2f_intercept_fetched:.2f} (Default)")
-            s2f_intercept = st.number_input("S2F Intercept", min_value=0.0, max_value=100.0, value=s2f_intercept_fetched if use_fetched_data else 14.6, help="S2F model intercept (default 14.6)")
+            s2f_intercept_fetched = float(data.get('s2f_intercept', -1.84))
+            st.write(f"Fetched S2F Intercept: {s2f_intercept_fetched:.2f} (Default for ln(sf) model)")
+            if s2f_intercept_fetched < -10 or s2f_intercept_fetched > 10:
+                st.warning("S2F intercept seems unusual. Verify and edit if needed.")
+            s2f_intercept = st.number_input("S2F Intercept", min_value=-10.0, max_value=10.0, value=s2f_intercept_fetched if use_fetched_data else -1.84, help="S2F model intercept for ln(sf) model (default -1.84)")
             
-            s2f_slope_fetched = float(data.get('s2f_slope', 0.05))
-            st.write(f"Fetched S2F Slope: {s2f_slope_fetched:.2f} (Default)")
-            s2f_slope = st.number_input("S2F Slope", min_value=0.0, max_value=1.0, value=s2f_slope_fetched if use_fetched_data else 0.05, help="S2F model slope (default 0.05)")
+            s2f_slope_fetched = float(data.get('s2f_slope', 3.96))
+            st.write(f"Fetched S2F Slope: {s2f_slope_fetched:.2f} (Default for ln(sf) model)")
+            if s2f_slope_fetched < 0 or s2f_slope_fetched > 10:
+                st.warning("S2F slope seems unusual. Verify and edit if needed.")
+            s2f_slope = st.number_input("S2F Slope", min_value=0.0, max_value=10.0, value=s2f_slope_fetched if use_fetched_data else 3.96, help="S2F model slope for ln(sf) model (default 3.96)")
             
-            metcalfe_coeff_fetched = float(data.get('metcalfe_coeff', 0.0001))
-            st.write(f"Fetched Metcalfe Coefficient: {metcalfe_coeff_fetched:.4f} (Default, adjust to 0.001 for higher valuation)")
-            if metcalfe_coeff_fetched < 0.00001 or metcalfe_coeff_fetched > 0.01:
+            metcalfe_coeff_fetched = float(data.get('metcalfe_coeff', 1.0))
+            st.write(f"Fetched Metcalfe Coefficient: {metcalfe_coeff_fetched:.4f} (Default, yields ~$50,000-$70,000/BTC)")
+            if metcalfe_coeff_fetched < 0.1 or metcalfe_coeff_fetched > 10:
                 st.warning("Metcalfe coefficient seems unusual. Verify and edit if needed.")
-            metcalfe_coeff = st.number_input("Metcalfe Coefficient", min_value=0.0, max_value=0.01, value=metcalfe_coeff_fetched if use_fetched_data else 0.0001, help="Scaling factor for Metcalfe's Law (default 0.0001)")
+            metcalfe_coeff = st.number_input("Metcalfe Coefficient", min_value=0.0, max_value=10.0, value=metcalfe_coeff_fetched if use_fetched_data else 1.0, help="Scaling factor for Metcalfe's Law (default 1.0)")
         
         with st.expander("Sentiment Inputs"):
             fear_greed_fetched = int(data.get('fear_greed', 50))
@@ -213,17 +241,17 @@ with tab1:
             sentiment_score = st.number_input("Sentiment Score (-1 to 1)", min_value=-1.0, max_value=1.0, value=sentiment_score_fetched if use_fetched_data else 0.5, help="Positive=Bullish, Negative=Bearish (default 0.5)")
         
         with st.expander("Macro Inputs"):
-            us_inflation_fetched = float(data.get('us_inflation', 3.0))
+            us_inflation_fetched = float(data.get('us_inflation', 2.8))
             st.write(f"Fetched US Inflation: {us_inflation_fetched:.2f}% (Web-scraped, expect 2.5-3.5%)")
             if us_inflation_fetched < 1 or us_inflation_fetched > 10:
                 st.warning("US inflation seems unusual. Verify and edit if needed.")
-            us_inflation = st.number_input("US Inflation Rate (%)", min_value=0.0, max_value=50.0, value=us_inflation_fetched if use_fetched_data else 3.0, help="Annual US inflation rate (web-scraped)")
+            us_inflation = st.number_input("US Inflation Rate (%)", min_value=0.0, max_value=50.0, value=us_inflation_fetched if use_fetched_data else 2.8, help="Annual US inflation rate (web-scraped)")
             
-            fed_rate_fetched = float(data.get('fed_rate', 5.0))
+            fed_rate_fetched = float(data.get('fed_rate', 4.75))
             st.write(f"Fetched Fed Rate: {fed_rate_fetched:.2f}% (Web-scraped, expect 4.5-5.0%)")
             if fed_rate_fetched < 2 or fed_rate_fetched > 10:
                 st.warning("Fed rate seems unusual. Verify and edit if needed.")
-            fed_rate = st.number_input("Fed Interest Rate (%)", min_value=0.0, max_value=50.0, value=fed_rate_fetched if use_fetched_data else 5.0, help="Federal Reserve interest rate (web-scraped)")
+            fed_rate = st.number_input("Fed Interest Rate (%)", min_value=0.0, max_value=50.0, value=fed_rate_fetched if use_fetched_data else 4.75, help="Federal Reserve interest rate (web-scraped)")
             
             sp_correlation_fetched = float(data.get('sp_correlation', 0.5))
             st.write(f"Fetched S&P 500 Correlation: {sp_correlation_fetched:.2f} (Calculated, expect 0.4-0.6)")
@@ -231,11 +259,11 @@ with tab1:
                 st.warning("S&P 500 correlation seems unusual. Verify and edit if needed.")
             sp_correlation = st.number_input("S&P 500 Correlation (0-1)", min_value=0.0, max_value=1.0, value=sp_correlation_fetched if use_fetched_data else 0.5, help="BTC-S&P 500 correlation (calculated)")
             
-            gold_price_fetched = float(data.get('gold_price', 2000.0))
+            gold_price_fetched = float(data.get('gold_price', 2200.0))
             st.write(f"Fetched Gold Price: ${gold_price_fetched:.2f} (Yahoo Finance, expect $2,000-$2,500)")
             if gold_price_fetched < 1500 or gold_price_fetched > 3000:
                 st.warning("Gold price seems unusual. Verify and edit if needed.")
-            gold_price = st.number_input("Gold Price (USD/oz)", min_value=0.0, value=gold_price_fetched if use_fetched_data else 2000.0, help="Gold price for comparison (Yahoo Finance)")
+            gold_price = st.number_input("Gold Price (USD/oz)", min_value=0.0, value=gold_price_fetched if use_fetched_data else 2200.0, help="Gold price for comparison (Yahoo Finance)")
         
         with st.expander("Technical Inputs"):
             rsi_fetched = float(data.get('rsi', 50.0))
@@ -244,26 +272,26 @@ with tab1:
                 st.warning("RSI seems unusual. Verify and edit if needed.")
             rsi = st.number_input("RSI (14-day)", min_value=0.0, max_value=100.0, value=rsi_fetched if use_fetched_data else 50.0, help="Overbought >70, Oversold <30 (Yahoo Finance)")
             
-            ma_50_fetched = float(data.get('50_day_ma', 57000.0))
+            ma_50_fetched = float(data.get('50_day_ma', 62000.0))
             st.write(f"Fetched 50-Day MA: ${ma_50_fetched:.2f} (Yahoo Finance, expect $55,000-$65,000)")
             if ma_50_fetched < 40000 or ma_50_fetched > 80000:
                 st.warning("50-day MA seems unusual. Verify and edit if needed.")
-            ma_50 = st.number_input("50-Day MA", min_value=0.0, value=ma_50_fetched if use_fetched_data else 57000.0, help="50-day moving average (Yahoo Finance)")
+            ma_50 = st.number_input("50-Day MA", min_value=0.0, value=ma_50_fetched if use_fetched_data else 62000.0, help="50-day moving average (Yahoo Finance)")
             
-            ma_200_fetched = float(data.get('200_day_ma', 54000.0))
+            ma_200_fetched = float(data.get('200_day_ma', 58000.0))
             st.write(f"Fetched 200-Day MA: ${ma_200_fetched:.2f} (Yahoo Finance, expect $50,000-$60,000)")
             if ma_200_fetched < 40000 or ma_200_fetched > 80000:
                 st.warning("200-day MA seems unusual. Verify and edit if needed.")
-            ma_200 = st.number_input("200-Day MA", min_value=0.0, value=ma_200_fetched if use_fetched_data else 54000.0, help="200-day moving average (Yahoo Finance)")
+            ma_200 = st.number_input("200-Day MA", min_value=0.0, value=ma_200_fetched if use_fetched_data else 58000.0, help="200-day moving average (Yahoo Finance)")
         
         with st.expander("Monte Carlo Settings"):
             monte_carlo_runs_fetched = int(data.get('monte_carlo_runs', 1000))
             st.write(f"Fetched Monte Carlo Runs: {monte_carlo_runs_fetched} (Default)")
             monte_carlo_runs = st.number_input("Number of Runs", min_value=100, max_value=2000, value=monte_carlo_runs_fetched if use_fetched_data else 1000, help="100-2000 runs (default 1000)")
             
-            volatility_adj_fetched = float(data.get('volatility_adj', 30.0))
+            volatility_adj_fetched = float(data.get('volatility_adj', 10.0))
             st.write(f"Fetched Volatility Adjustment: {volatility_adj_fetched:.2f}% (Default)")
-            volatility_adj = st.number_input("Volatility Adjustment Range (±%)", min_value=0.0, max_value=50.0, value=volatility_adj_fetched if use_fetched_data else 30.0, help="Volatility variation (default 30%)")
+            volatility_adj = st.number_input("Volatility Adjustment Range (±%)", min_value=0.0, max_value=50.0, value=volatility_adj_fetched if use_fetched_data else 10.0, help="Volatility variation (default 10%)")
             
             growth_adj_fetched = float(data.get('growth_adj', 20.0))
             st.write(f"Fetched Growth Adjustment: {growth_adj_fetched:.2f}% (Default)")
