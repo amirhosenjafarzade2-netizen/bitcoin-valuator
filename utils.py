@@ -50,10 +50,12 @@ def validate_inputs(inputs):
         'electricity_cost': (0, 1),
         'block_reward': (0, 50),
         'blocks_per_day': (100, 200),
-        # New model metrics (post-calculation, but validate inputs for them)
+        # New model metrics
         'rvmr': (0, 100),
         'mayer_multiple': (0, 5),
-        'sentiment_index': (0, 2)
+        'sentiment_index': (0, 2),
+        'inflation_premium': (0, 0.5),
+        'real_rate_discount': (0, 0.5)
     }
     
     try:
@@ -125,7 +127,9 @@ def generate_pdf_report(results, portfolio_df, model_comp_fig):
             ['RVMR', f"{results.get('rvmr', 0):.2f}"],
             ['Mayer Multiple', f"{results.get('mayer_multiple', 0):.2f}"],
             ['Sentiment Index (MSC)', f"{results.get('sentiment_index', 0):.2f}"],
-            ['Hash Ribbons Signal', results.get('hash_ribbon_signal', '-')]
+            ['Hash Ribbons Signal', results.get('hash_ribbon_signal', '-')],
+            ['Inflation Premium (Macro)', f"{results.get('inflation_premium', 0):.2f}"],
+            ['Real Rate Discount (Macro)', f"{results.get('real_rate_discount', 0):.2f}"]
         ]
         results_table = Table(results_data)
         results_table.setStyle(TableStyle([
@@ -134,7 +138,7 @@ def generate_pdf_report(results, portfolio_df, model_comp_fig):
             ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
             ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
             ('FONTSIZE', (0, 0), (-1, 0), 14),
-            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+            ('BOTTOMPADING', (0, 0), (-1, 0), 12),
             ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
             ('GRID', (0, 0), (-1, -1), 1, colors.black)
         ]))
@@ -162,7 +166,8 @@ def generate_pdf_report(results, portfolio_df, model_comp_fig):
             ['Energy Value', f"${results.get('energy_value', 0):.2f}"],
             ['RVMR', f"${results.get('rvmr_value', 0):.2f}"],
             ['Mayer Multiple', f"${results.get('mayer_multiple_value', 0):.2f}"],
-            ['Hash Ribbons', f"${results.get('hash_ribbons_value', 0):.2f}"]
+            ['Hash Ribbons', f"${results.get('hash_ribbons_value', 0):.2f}"],
+            ['Macro Monetary', f"${results.get('macro_monetary_value', 0):.2f}"]
         ]
         model_table = Table(model_data)
         model_table.setStyle(TableStyle([
@@ -171,7 +176,7 @@ def generate_pdf_report(results, portfolio_df, model_comp_fig):
             ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
             ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
             ('FONTSIZE', (0, 0), (-1, 0), 14),
-            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+            ('BOTTOMPADING', (0, 0), (-1, 0), 12),
             ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
             ('GRID', (0, 0), (-1, -1), 1, colors.black)
         ]))
@@ -189,7 +194,7 @@ def generate_pdf_report(results, portfolio_df, model_comp_fig):
                 ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
                 ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
                 ('FONTSIZE', (0, 0), (-1, 0), 14),
-                ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+                ('BOTTOMPADING', (0, 0), (-1, 0), 12),
                 ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
                 ('GRID', (0, 0), (-1, -1), 1, colors.black)
             ]))
