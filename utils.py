@@ -49,7 +49,11 @@ def validate_inputs(inputs):
         'metcalfe_coeff': (0, 0.01),
         'electricity_cost': (0, 1),
         'block_reward': (0, 50),
-        'blocks_per_day': (100, 200)
+        'blocks_per_day': (100, 200),
+        # New model metrics (post-calculation, but validate inputs for them)
+        'rvmr': (0, 100),
+        'mayer_multiple': (0, 5),
+        'sentiment_index': (0, 2)
     }
     
     try:
@@ -117,7 +121,11 @@ def generate_pdf_report(results, portfolio_df, model_comp_fig):
             ['MVRV Z-Score', f"{results.get('mvrv_z_score', 0):.2f}"],
             ['SOPR Signal', results.get('sopr_signal', '-')],
             ['Puell Multiple Signal', results.get('puell_signal', '-')],
-            ['Mining Cost vs Price', f"{results.get('mining_cost_vs_price', 0):.2f}%"]
+            ['Mining Cost vs Price', f"{results.get('mining_cost_vs_price', 0):.2f}%"],
+            ['RVMR', f"{results.get('rvmr', 0):.2f}"],
+            ['Mayer Multiple', f"{results.get('mayer_multiple', 0):.2f}"],
+            ['Sentiment Index (MSC)', f"{results.get('sentiment_index', 0):.2f}"],
+            ['Hash Ribbons Signal', results.get('hash_ribbon_signal', '-')]
         ]
         results_table = Table(results_data)
         results_table.setStyle(TableStyle([
@@ -149,7 +157,12 @@ def generate_pdf_report(results, portfolio_df, model_comp_fig):
             ['Metcalfe', f"${results.get('metcalfe_value', 0):.2f}"],
             ['NVT', f"${results.get('nvt_value', 0):.2f}"],
             ['Pi Cycle', f"${results.get('pi_cycle_value', 0):.2f}"],
-            ['Reverse S2F', f"${results.get('reverse_s2f_value', 0):.2f}"]
+            ['Reverse S2F', f"${results.get('reverse_s2f_value', 0):.2f}"],
+            ['MSC', f"${results.get('msc_value', 0):.2f}"],
+            ['Energy Value', f"${results.get('energy_value', 0):.2f}"],
+            ['RVMR', f"${results.get('rvmr_value', 0):.2f}"],
+            ['Mayer Multiple', f"${results.get('mayer_multiple_value', 0):.2f}"],
+            ['Hash Ribbons', f"${results.get('hash_ribbons_value', 0):.2f}"]
         ]
         model_table = Table(model_data)
         model_table.setStyle(TableStyle([
