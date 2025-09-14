@@ -1,147 +1,231 @@
-import numpy as np
+import plotly.express as px
+import plotly.graph_objects as go
 import pandas as pd
-from datetime import datetime, timedelta
+import numpy as np
+import streamlit as st
 import logging
-from data_fetch import fetch_history
 
 # Configure logging
 logging.basicConfig(filename='app.log', level=logging.ERROR, format='%(asctime)s - %(levelname)s - %(message)s')
 
-def calibrate_s2f(history):
+def plot_heatmap(intrinsic_value, volatility, growth_rate):
     """
-    Calibrate S2F model using historical data.
+    Generate a static heatmap for sensitivity analysis.
     """
     try:
-        stock = history['circulating_supply'] if 'circulating_supply' in history else 19700000
-        flow = 6.25 * 144 * 365
-        sf = stock / flow if flow > 0 else 100
-        log_price = np.log(history['Close'])
-        coeffs = np.polyfit(sf, log_price, 1)
-        return coeffs
+        volatility_range = np.linspace(max(0.01, volatility - 10), min(50, volatility + 10), 10)
+        growth_range = np.linspace(max(0, growth_rate - 10), min(50, growth_rate + 10), 10)
+        
+        z = np.zeros((len(growth_range), len(volatility_range)))
+        for i, g in enumerate(growth_range):
+            for j, v in enumerate(volatility_range):
+                z[i, j] = intrinsic_value * (1 + g / 100) / (1 + v / 100)
+        
+        fig = go.Figure(data=go.Heatmap(
+            z=z,
+            x=volatility_range,
+            y=growth_range,
+            colorscale='Viridis',
+            hovertemplate='Volatility: %{x:.2f}%<br>Growth: %{y:.2f}%<br>Value: $%{z:.2f}<extra></extra>',
+            zmin=np.min(z) * 0.8,
+            zmax=np.max(z) * 1.2
+        ))
+        
+        fig.update_layout(
+            title='Sensitivity Analysis: Intrinsic Value vs Volatility and Growth Rate',
+            xaxis_title='Volatility (%)',
+            yaxis_title='Growth Rate (%)',
+            template='plotly_white',
+            margin=dict(l=50, r=50, t=80, b=50),
+            height=400,
+            staticPlot=True
+        )
+        
+        return fig
     except Exception as e:
-        logging.error(f"Error calibrating S2F: {str(e)}")
-        return [14.6, 0.05]
+        logging.error(f"Error in heatmap: {str(e)}")
+        return None
 
-def calculate_valuation(inputs):
+def plot_monte_carlo(mc_results):
     """
-    Calculate intrinsic value based on the selected model.
-    Returns a dictionary with relevant metrics.
+    Generate a static histogram for Monte Carlo simulation results.
     """
-    model = inputs['model']
-    current_price = inputs['current_price']
-    mos = inputs['margin_of_safety']
-    volatility_adj = inputs['volatility_adj']
-    
     try:
-        if model == "Stock-to-Flow (S2F)":
-            results = s2f_model(inputs)
-        elif model == "Metcalfe's Law":
-            results = metcalfe_law(inputs)
-        elif model == "Network Value to Transactions (NVT)":
-            results = nvt_model(inputs)
-        elif model == "Pi Cycle Top Indicator":
-            results = pi_cycle(inputs)
-        elif model == "Reverse S2F":
-            results = reverse_s2f(inputs)
-        else:
-            results = {'intrinsic_value': 0, 'error': 'Unknown model'}
+        values = mc_results.get('values', np.random.normal(60000, 10000, 1000))
+        avg_value = mc_results.get('avg_value', np.mean(values))
+        std_dev = mc_results.get('std_dev', np.std(values))
         
-        # Common metrics
-        intrinsic_value = results.get('intrinsic_value', 0) * (1 - volatility_adj / 100)
-        results['current_price'] = current_price
-        results['intrinsic_value'] = max(intrinsic_value, 0) * (1 - mos / 100)
-        results['safe_buy_price'] = results['intrinsic_value']
-        results['undervaluation'] = ((intrinsic_value - current_price) / current_price * 100) if current_price > 0 else 0
-        results['verdict'] = get_verdict(results['undervaluation'])
-        results['score'] = calculate_score(inputs, results)
+        fig = px.histogram(
+            x=values,
+            nbins=50,
+            title='Monte Carlo Simulation: Distribution of Intrinsic Values',
+            labels={'x': 'Intrinsic Value ($)', 'y': 'Frequency'},
+            template='plotly_white',
+            color_discrete_sequence=['#636EFA']
+        )
         
-        # Model-specific metrics
-        results['nvt_ratio'] = inputs['market_cap'] / inputs['transaction_volume'] if inputs['transaction_volume'] > 0 else 50
-        results['mvrv_z_score'] = (inputs['mvrv'] - 1) / 0.5 if inputs['mvrv'] > 0 else 0
-        results['sopr_signal'] = 'Buy' if inputs['sopr'] < 1 else 'Sell' if inputs['sopr'] > 1.2 else 'Hold'
-        results['puell_signal'] = 'Buy' if inputs['puell_multiple'] < 0.5 else 'Sell' if inputs['puell_multiple'] > 4 else 'Hold'
-        results['mining_cost_vs_price'] = (inputs['mining_cost'] - current_price) / current_price * 100 if current_price > 0 else 0
+        fig.add_vline(x=avg_value, line_dash="dash", line_color="green", annotation_text="Mean", annotation_position="top")
+        fig.add_vline(x=avg_value - std_dev, line_dash="dot", line_color="orange", annotation_text="-1 SD", annotation_position="top left")
+        fig.add_vline(x=avg_value + std_dev, line_dash="dot", line_color="orange", annotation_text="+1 SD", annotation_position="top right")
         
-        # All model values
-        all_models = {
-            's2f_value': s2f_model(inputs).get('intrinsic_value', 0),
-            'metcalfe_value': metcalfe_law(inputs).get('intrinsic_value', 0),
-            'nvt_value': nvt_model(inputs).get('intrinsic_value', 0),
-            'pi_cycle_value': pi_cycle(inputs).get('intrinsic_value', 0),
-            'reverse_s2f_value': reverse_s2f(inputs).get('intrinsic_value', 0)
-        }
-        results.update(all_models)
+        fig.update_layout(
+            showlegend=False,
+            margin=dict(l=50, r=50, t=80, b=50),
+            height=400,
+            staticPlot=True
+        )
         
-        return results
-    
+        return fig
     except Exception as e:
-        logging.error(f"Error in valuation: {str(e)}")
-        return {'intrinsic_value': 0, 'error': f'Calculation failed: {str(e)}'}
+        logging.error(f"Error in Monte Carlo plot: {str(e)}")
+        return None
 
-def get_verdict(undervaluation):
-    """Determine buy/sell/hold verdict."""
-    if undervaluation > 20:
-        return "Strong Buy"
-    elif undervaluation > 0:
-        return "Buy"
-    elif undervaluation > -20:
-        return "Hold"
-    else:
-        return "Sell"
+def plot_model_comparison(model_comp_df):
+    """
+    Generate a static bar chart comparing intrinsic values across models.
+    """
+    try:
+        fig = px.bar(
+            model_comp_df,
+            x='Model',
+            y='Intrinsic Value',
+            title='Model Comparison: Intrinsic Values',
+            labels={'Intrinsic Value': 'Intrinsic Value ($)'},
+            template='plotly_white',
+            color='Model',
+            color_discrete_sequence=px.colors.qualitative.Set2
+        )
+        
+        fig.update_layout(
+            showlegend=False,
+            margin=dict(l=50, r=50, t=80, b=50),
+            height=400,
+            staticPlot=True
+        )
+        
+        return fig
+    except Exception as e:
+        logging.error(f"Error in model comparison plot: {str(e)}")
+        return None
 
-def calculate_score(inputs, results):
-    """Calculate an overall score based on metrics."""
-    score = 50
-    if results['undervaluation'] > 0:
-        score += min(results['undervaluation'], 30)
-    if inputs['fear_greed'] < 25:
-        score += 10
-    elif inputs['fear_greed'] > 75:
-        score -= 10
-    if inputs['sopr'] < 1:
-        score += 10
-    if inputs['puell_multiple'] < 0.5:
-        score += 10
-    return max(min(score, 100), 0)
+def plot_onchain_metrics(data, history):
+    """
+    Plot static on-chain metrics over time.
+    """
+    try:
+        if history.empty:
+            st.warning("No historical data available for on-chain metrics.")
+            return None
+        
+        df = history.copy()
+        df['NVT'] = df['Close'] * data['circulating_supply'] / df['estimated-transaction-volume-usd']
+        df['MVRV'] = df['Close'] * data['circulating_supply'] / data['realized_cap']
+        
+        fig = go.Figure()
+        fig.add_trace(go.Scatter(x=df.index, y=df['NVT'], name='NVT Ratio', line=dict(color='#636EFA')))
+        fig.add_trace(go.Scatter(x=df.index, y=df['MVRV'], name='MVRV Ratio', line=dict(color='#EF553B')))
+        
+        fig.update_layout(
+            title='On-Chain Metrics: NVT and MVRV Over Time',
+            xaxis_title='Date',
+            yaxis_title='Ratio',
+            template='plotly_white',
+            margin=dict(l=50, r=50, t=80, b=50),
+            height=400,
+            staticPlot=True,
+            hovermode='x unified'
+        )
+        
+        return fig
+    except Exception as e:
+        logging.error(f"Error in on-chain plot: {str(e)}")
+        return None
 
-def s2f_model(inputs):
-    """Stock-to-Flow model: price based on scarcity."""
-    history = fetch_history(period='5y')
-    coeffs = calibrate_s2f(history) if not history.empty else [14.6, 0.05]
-    stock = inputs['circulating_supply']
-    flow = 6.25 * 144 * 365
-    sf = stock / flow if flow > 0 else 100
-    intrinsic_value = np.exp(coeffs[0] + coeffs[1] * sf) * (1 - inputs['volatility_adj'] / 100)
-    return {'intrinsic_value': intrinsic_value}
+def plot_sentiment_analysis(data, history):
+    """
+    Plot static sentiment metrics with price.
+    """
+    try:
+        if history.empty:
+            st.warning("No historical data available for sentiment analysis.")
+            return None
+        
+        fig = go.Figure()
+        fig.add_trace(go.Scatter(x=history.index, y=history['Close'], name='Price ($)', line=dict(color='#636EFA')))
+        fig.add_trace(go.Scatter(x=history.index, y=[data['fear_greed']] * len(history), name='Fear & Greed', line=dict(color='#EF553B', dash='dash')))
+        
+        fig.update_layout(
+            title='Sentiment: Price vs Fear & Greed Index',
+            xaxis_title='Date',
+            yaxis_title='Value',
+            template='plotly_white',
+            margin=dict(l=50, r=50, t=80, b=50),
+            height=400,
+            staticPlot=True,
+            hovermode='x unified'
+        )
+        
+        return fig
+    except Exception as e:
+        logging.error(f"Error in sentiment plot: {str(e)}")
+        return None
 
-def metcalfe_law(inputs):
-    """Metcalfe's Law: value proportional to square of active addresses."""
-    n = inputs['active_addresses']
-    intrinsic_value = (n ** 2) * 0.0001 * (1 - inputs['volatility_adj'] / 100)
-    return {'intrinsic_value': intrinsic_value}
+def plot_price_history(history):
+    """
+    Plot static Bitcoin price history.
+    """
+    try:
+        if history.empty:
+            st.warning("No historical price data available.")
+            return None
+        
+        fig = px.line(
+            history,
+            x=history.index,
+            y='Close',
+            title='Bitcoin Price History',
+            labels={'Close': 'Price ($)'},
+            template='plotly_white'
+        )
+        
+        fig.update_layout(
+            margin=dict(l=50, r=50, t=80, b=50),
+            height=400,
+            staticPlot=True
+        )
+        
+        return fig
+    except Exception as e:
+        logging.error(f"Error in price history plot: {str(e)}")
+        return None
 
-def nvt_model(inputs):
-    """NVT: market cap to transaction volume, benchmarked to historical avg."""
-    nvt = inputs['market_cap'] / inputs['transaction_volume'] if inputs['transaction_volume'] > 0 else 50
-    intrinsic_value = inputs['current_price'] * (50 / nvt) * (1 - inputs['volatility_adj'] / 100)
-    return {'intrinsic_value': intrinsic_value}
-
-def pi_cycle(inputs):
-    """Pi Cycle Top: uses 111-day and 350-day MAs."""
-    ma_111 = inputs['50_day_ma'] * 1.1
-    ma_350 = inputs['200_day_ma'] * 1.2
-    intrinsic_value = ma_111 if inputs['current_price'] > ma_350 else inputs['current_price']
-    intrinsic_value *= (1 - inputs['volatility_adj'] / 100)
-    return {'intrinsic_value': intrinsic_value}
-
-def reverse_s2f(inputs):
-    """Reverse S2F: implied growth to reach current price."""
-    history = fetch_history(period='5y')
-    coeffs = calibrate_s2f(history) if not history.empty else [14.6, 0.05]
-    stock = inputs['circulating_supply']
-    flow = 6.25 * 144 * 365
-    sf = stock / flow if flow > 0 else 100
-    target_price = inputs['current_price']
-    implied_sf = (np.log(target_price) - coeffs[0]) / coeffs[1]
-    intrinsic_value = target_price * (1 - inputs['volatility_adj'] / 100)
-    return {'intrinsic_value': intrinsic_value, 'implied_sf': implied_sf}
+def plot_macro_correlations(data, history):
+    """
+    Plot static Bitcoin price vs S&P 500.
+    """
+    try:
+        if history.empty:
+            st.warning("No historical data for macro correlations.")
+            return None
+        
+        sp_hist = yf.download('^GSPC', period='5y')['Close']
+        sp_hist = sp_hist.reindex(history.index, method='ffill')
+        
+        fig = go.Figure()
+        fig.add_trace(go.Scatter(x=history.index, y=history['Close'], name='BTC Price', line=dict(color='#636EFA')))
+        fig.add_trace(go.Scatter(x=sp_hist.index, y=sp_hist, name='S&P 500', line=dict(color='#EF553B')))
+        
+        fig.update_layout(
+            title='Macro Correlations: BTC vs S&P 500',
+            xaxis_title='Date',
+            yaxis_title='Value',
+            template='plotly_white',
+            margin=dict(l=50, r=50, t=80, b=50),
+            height=400,
+            staticPlot=True
+        )
+        
+        return fig
+    except Exception as e:
+        logging.error(f"Error in macro correlations plot: {str(e)}")
+        return None
