@@ -2,6 +2,9 @@
 import pandas as pd
 from datetime import datetime
 import logging
+from reportlab.lib.pagesizes import letter
+from reportlab.pdfgen import canvas
+from io import BytesIO
 
 # Configure logging
 logging.basicConfig(filename='app.log', level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -248,9 +251,6 @@ def generate_pdf_report(results, portfolio, model_comp_fig):
         bytes: PDF content.
     """
     try:
-        from reportlab.lib.pagesizes import letter
-        from reportlab.pdfgen import canvas
-        from io import BytesIO
         buffer = BytesIO()
         c = canvas.Canvas(buffer, pagesize=letter)
         c.drawString(100, 750, "Bitcoin Valuation Report")
@@ -265,3 +265,4 @@ def generate_pdf_report(results, portfolio, model_comp_fig):
     except Exception as e:
         logging.error(f"PDF report generation failed: {str(e)}")
         raise Exception(f"Failed to generate PDF report: {str(e)}")
+```
