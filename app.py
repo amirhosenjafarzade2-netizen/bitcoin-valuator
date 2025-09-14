@@ -1,3 +1,4 @@
+```python
 import streamlit as st
 import pandas as pd
 from datetime import datetime
@@ -205,11 +206,22 @@ with tab1:
             blocks_per_day = st.number_input("Blocks Per Day", min_value=100.0, max_value=200.0, value=blocks_per_day_fetched if use_fetched_data else 144.0, help="Approx blocks mined per day (Blockchain.com)")
         
         with st.expander("Model-Specific Inputs"):
-            s2f_intercept_fetched = float(data.get('s2f_intercept', -1.84))
+            try:
+                s2f_intercept_fetched = float(data.get('s2f_intercept', -1.84))
+            except (TypeError, ValueError) as e:
+                logging.warning(f"Invalid s2f_intercept from data: {data.get('s2f_intercept')}, using default -1.84. Error: {str(e)}")
+                s2f_intercept_fetched = -1.84
             st.write(f"Fetched S2F Intercept: {s2f_intercept_fetched:.2f} (Default for ln(sf) model)")
             if s2f_intercept_fetched < -10 or s2f_intercept_fetched > 10:
                 st.warning("S2F intercept seems unusual. Verify and edit if needed.")
-            s2f_intercept = st.number_input("S2F Intercept", min_value=-10.0, max_value=10.0, value=s2f_intercept_fetched if use_fetched_data else -1.84, help="S2F model intercept for ln(sf) model (default -1.84)")
+            s2f_intercept_value = s2f_intercept_fetched if use_fetched_data else -1.84
+            s2f_intercept = st.number_input(
+                "S2F Intercept",
+                min_value=-10.0,
+                max_value=10.0,
+                value=float(s2f_intercept_value),  # Explicit float cast
+                help="S2F model intercept for ln(sf) model (default -1.84)"
+            )
             
             s2f_slope_fetched = float(data.get('s2f_slope', 3.96))
             st.write(f"Fetched S2F Slope: {s2f_slope_fetched:.2f} (Default for ln(sf) model)")
