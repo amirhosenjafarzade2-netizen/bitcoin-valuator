@@ -1,18 +1,23 @@
 import streamlit as st
 import pandas as pd
+import logging
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor
+
 try:
     from data_fetch import fetch_bitcoin_data, fetch_history
     from valuation_models import calculate_valuation
-    from visualizations import plot_heatmap, plot_monte_carlo, plot_model_comparison, plot_onchain_metrics, plot_sentiment_analysis, plot_price_history, plot_macro_correlations
+    from visualizations import (
+        plot_heatmap, plot_monte_carlo, plot_model_comparison,
+        plot_onchain_metrics, plot_sentiment_analysis,
+        plot_price_history, plot_macro_correlations
+    )
     from utils import validate_inputs, export_portfolio, generate_pdf_report
     from monte_carlo import run_monte_carlo
 except ImportError as e:
     st.error(f"Failed to import modules: {str(e)}. Ensure all required files (e.g., utils.py) are in the project directory.")
     logging.error(f"Import error: {str(e)}")
     st.stop()
-import logging
 
 # Configure logging
 logging.basicConfig(filename='app.log', level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
