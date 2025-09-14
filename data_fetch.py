@@ -22,12 +22,52 @@ def get_yfinance_ticker(symbol):
 @retry(stop=stop_after_attempt(5), wait=wait_exponential(multiplier=1, min=4, max=10))
 def fetch_bitcoin_data(electricity_cost=0.05):
     """
-    Fetch Bitcoin data from CoinGecko, CoinMarketCap, Kraken, or Binance (in order).
+    Fetch Bitcoin data from CoinGecko, CoinMarketCap, Kraken, or Binance.
     electricity_cost: Cost per kWh for mining cost estimation ($/kWh).
-    Returns a dictionary with relevant metrics.
+    Returns a dictionary with all required metrics.
     """
     data = {}
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+    
+    # Initialize defaults to ensure all keys exist
+    data.update({
+        'current_price': 60000.0,
+        'market_cap': 1.2e12,
+        'total_volume': 5e10,
+        'circulating_supply': 19700000,
+        'total_supply': 21000000,
+        'social_volume': 10000,
+        'sentiment_score': 0.5,
+        'hash_rate': 500.0,
+        'active_addresses': 1000000,
+        'transaction_volume': 1e9,
+        'mvrv': 2.0,
+        'sopr': 1.0,
+        'puell_multiple': 1.0,
+        'realized_cap': 6e11,
+        'mining_cost': 0.0,  # Initialize to avoid KeyError
+        'electricity_cost': electricity_cost,
+        'next_halving_date': datetime(2028, 4, 1),
+        'fear_greed': 50,
+        'gold_price': 2000.0,
+        'sp_correlation': 0.5,
+        'us_inflation': 3.0,
+        'fed_rate': 5.0,
+        '50_day_ma': 57000.0,
+        '200_day_ma': 54000.0,
+        'rsi': 50.0,
+        'beta': 1.5,
+        'desired_return': 15.0,
+        'margin_of_safety': 25.0,
+        'monte_carlo_runs': 1000,
+        'volatility_adj': 30.0,
+        'growth_adj': 20.0,
+        's2f_intercept': 14.6,
+        's2f_slope': 0.05,
+        'metcalfe_coeff': 0.0001,
+        'block_reward': 6.25,
+        'blocks_per_day': 144
+    })
 
     # Try CoinGecko
     try:
@@ -46,9 +86,8 @@ def fetch_bitcoin_data(electricity_cost=0.05):
         up = cg_response['sentiment_votes_up_percentage']
         down = cg_response['sentiment_votes_down_percentage']
         data['sentiment_score'] = (up - down) / 100 if up and down else 0.0
-        logging.info("Successfully fetched data from CoinGecko")
-        st.success("Fetched market data from CoinGecko")
-        return data  # Return early if successful
+        logging.info(f"Fetched from CoinGecko: price={data['current_price']}, market_cap={data['market_cap']}")
+        st.success(f"Fetched market data from CoinGecko: ${data['current_price']:.2f}")
     
     except Exception as e:
         logging.error(f"CoinGecko failed: {str(e)}")
@@ -69,10 +108,9 @@ def fetch_bitcoin_data(electricity_cost=0.05):
             data['total_supply'] = btc_data['max_supply'] or 21000000
             data['social_volume'] = 10000
             data['sentiment_score'] = 0.5
-            logging.info("Successfully fetched data from CoinMarketCap")
-            st.success("Fetched market data from CoinMarketCap")
-            return data
-    
+            logging.info(f"Fetched from CoinMarketCap: price={data['current_price']}, market_cap={data['market_cap']}")
+            st.success(f"Fetched market data from CoinMarketCap: ${data['current_price']:.2f}")
+        
         except Exception as e:
             logging.error(f"CoinMarketCap failed: {str(e)}")
             st.warning("CoinMarketCap failed. Trying Kraken...")
@@ -95,9 +133,8 @@ def fetch_bitcoin_data(electricity_cost=0.05):
                 data['total_supply'] = 21000000
                 data['social_volume'] = 10000
                 data['sentiment_score'] = 0.5
-                logging.info(f"Successfully fetched data from Kraken: price={price}")
+                logging.info(f"Fetched from Kraken: price={price}, market_cap={data['market_cap']}")
                 st.success(f"Fetched market data from Kraken: ${price:.2f}")
-                return data
             
             except Exception as e:
                 logging.error(f"Kraken failed: {str(e)}")
@@ -120,20 +157,12 @@ def fetch_bitcoin_data(electricity_cost=0.05):
                     data['total_supply'] = 21000000
                     data['social_volume'] = 10000
                     data['sentiment_score'] = 0.5
-                    logging.info(f"Successfully fetched data from Binance: price={price}")
+                    logging.info(f"Fetched from Binance: price={price}, market_cap={data['market_cap']}")
                     st.success(f"Fetched market data from Binance: ${price:.2f}")
-                    return data
                 
                 except Exception as e:
                     logging.error(f"Binance failed: {str(e)}")
-                    st.error("Unable to fetch market data from all sources. Using defaults. Check API keys or network.")
-                    data['current_price'] = 60000.0
-                    data['market_cap'] = 1.2e12
-                    data['total_volume'] = 5e10
-                    data['circulating_supply'] = 19700000
-                    data['total_supply'] = 21000000
-                    data['social_volume'] = 10000
-                    data['sentiment_score'] = 0.5
+                    st.error("Unable to fetch market data. Using defaults.")
     
     # Blockchain.com for on-chain
     @retry(stop=stop_after_attempt(5), wait=wait_exponential(multiplier=1, min=4, max=10))
@@ -141,7 +170,9 @@ def fetch_bitcoin_data(electricity_cost=0.05):
         try:
             url = f"https://api.blockchain.info/charts/{chart_name}?format=json&timespan={timespan}"
             response = requests.get(url, headers=headers).json()
-            return response['values'][-1]['y']
+            value = response['values'][-1]['y']
+            logging.info(f"Fetched {chart_name}: {value}")
+            return value
         except Exception as e:
             logging.error(f"Error fetching {chart_name}: {str(e)}")
             return 0.0
@@ -155,11 +186,19 @@ def fetch_bitcoin_data(electricity_cost=0.05):
     data['realized_cap'] = data['market_cap'] / data['mvrv'] if data['mvrv'] > 0 else 6e11
     
     # Mining cost estimation
-    def estimate_mining_cost(hash_rate, electricity_cost):
-        power_consumption = hash_rate * 1000
-        return power_consumption * electricity_cost * 24 * 365 / (6.25 * 144)
-    data['mining_cost'] = estimate_mining_cost(data['hash_rate'], electricity_cost)
-    data['electricity_cost'] = electricity_cost
+    try:
+        def estimate_mining_cost(hash_rate, electricity_cost):
+            if hash_rate <= 0 or electricity_cost <= 0:
+                raise ValueError("Invalid hash_rate or electricity_cost")
+            power_consumption = hash_rate * 1000
+            mining_cost = power_consumption * electricity_cost * 24 * 365 / (6.25 * 144)
+            logging.info(f"Calculated mining_cost: {mining_cost}")
+            return mining_cost
+        data['mining_cost'] = estimate_mining_cost(data['hash_rate'], electricity_cost)
+        data['electricity_cost'] = electricity_cost
+    except Exception as e:
+        logging.error(f"Error calculating mining_cost: {str(e)}")
+        data['mining_cost'] = 10000.0  # Default to avoid KeyError
     
     # Next halving
     try:
@@ -170,26 +209,26 @@ def fetch_bitcoin_data(electricity_cost=0.05):
         minutes_left = blocks_left * 10
         days_left = minutes_left / 1440
         data['next_halving_date'] = datetime.now() + timedelta(days=days_left)
+        logging.info(f"Calculated next_halving_date: {data['next_halving_date']}")
     except Exception as e:
         logging.error(f"Error calculating halving: {str(e)}")
-        data['next_halving_date'] = datetime(2028, 4, 1)
     
     # Fear & Greed
     try:
         fng_url = "https://api.alternative.me/fng/?limit=1"
         fng_response = requests.get(fng_url, headers=headers).json()
         data['fear_greed'] = int(fng_response['data'][0]['value'])
+        logging.info(f"Fetched fear_greed: {data['fear_greed']}")
     except Exception as e:
         logging.error(f"Error fetching Fear & Greed: {str(e)}")
-        data['fear_greed'] = 50
     
     # Macro: Gold price
     try:
         gold = get_yfinance_ticker('GC=F')
         data['gold_price'] = gold.info.get('currentPrice', gold.info.get('regularMarketPrice', 2000.0))
+        logging.info(f"Fetched gold_price: {data['gold_price']}")
     except Exception as e:
         logging.error(f"Error fetching gold price: {str(e)}")
-        data['gold_price'] = 2000.0
     
     # Macro: S&P 500 correlation
     try:
@@ -199,9 +238,9 @@ def fetch_bitcoin_data(electricity_cost=0.05):
         sp_hist = yf.download('^GSPC', start=start, end=end)['Close']
         correlation = btc_hist.corr(sp_hist)
         data['sp_correlation'] = correlation if not np.isnan(correlation) else 0.5
+        logging.info(f"Calculated sp_correlation: {data['sp_correlation']}")
     except Exception as e:
         logging.error(f"Error calculating S&P correlation: {str(e)}")
-        data['sp_correlation'] = 0.5
     
     # Macro: US Inflation
     try:
@@ -212,9 +251,9 @@ def fetch_bitcoin_data(electricity_cost=0.05):
         latest_row = table.find_all('tr')[-1]
         cols = latest_row.find_all('td')
         data['us_inflation'] = float(cols[-1].text.strip().replace('%', '')) or 3.0
+        logging.info(f"Fetched us_inflation: {data['us_inflation']}")
     except Exception as e:
         logging.error(f"Error fetching inflation rate: {str(e)}")
-        data['us_inflation'] = 3.0
     
     # Macro: Fed Interest Rate
     try:
@@ -224,9 +263,9 @@ def fetch_bitcoin_data(electricity_cost=0.05):
         table = soup.find('table', id='h15table')
         fed_rate = float(table.find_all('tr')[-1].find_all('td')[-1].text.strip())
         data['fed_rate'] = fed_rate or 5.0
+        logging.info(f"Fetched fed_rate: {data['fed_rate']}")
     except Exception as e:
         logging.error(f"Error fetching Fed rate: {str(e)}")
-        data['fed_rate'] = 5.0
     
     # Technical
     try:
@@ -238,25 +277,11 @@ def fetch_bitcoin_data(electricity_cost=0.05):
         loss = (-delta.where(delta < 0, 0)).rolling(14).mean()
         rs = gain / loss
         data['rsi'] = 100 - 100 / (1 + rs).iloc[-1] if not rs.empty else 50.0
+        logging.info(f"Fetched technicals: 50_day_ma={data['50_day_ma']}, 200_day_ma={data['200_day_ma']}, rsi={data['rsi']}")
     except Exception as e:
         logging.error(f"Error calculating technical indicators: {str(e)}")
-        data['50_day_ma'] = data['current_price'] * 0.95
-        data['200_day_ma'] = data['current_price'] * 0.9
-        data['rsi'] = 50.0
     
-    # Defaults
-    data['beta'] = 1.5
-    data['desired_return'] = 15.0
-    data['margin_of_safety'] = 25.0
-    data['monte_carlo_runs'] = 1000
-    data['volatility_adj'] = 30.0
-    data['growth_adj'] = 20.0
-    data['s2f_intercept'] = 14.6
-    data['s2f_slope'] = 0.05
-    data['metcalfe_coeff'] = 0.0001
-    data['block_reward'] = 6.25
-    data['blocks_per_day'] = 144
-    
+    logging.info(f"Final data: {data}")
     return data
 
 @st.cache_data(ttl=86400)
@@ -288,6 +313,7 @@ def fetch_history(period='5y'):
             df['hash_rate_30d'] = 0.0
             df['hash_rate_60d'] = 0.0
         
+        logging.info("Fetched historical data successfully")
         return df
     except Exception as e:
         logging.error(f"Error fetching historical data: {str(e)}")
