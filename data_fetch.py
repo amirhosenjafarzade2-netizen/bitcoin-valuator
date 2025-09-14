@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 import os
 
 # Configure logging
-logging.basicConfig(filename='app.log', level=logging.ERROR, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(filename='app.log', level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 load_dotenv()
 
 @st.cache_resource
@@ -22,17 +22,18 @@ def get_yfinance_ticker(symbol):
 @retry(stop=stop_after_attempt(5), wait=wait_exponential(multiplier=1, min=4, max=10))
 def fetch_bitcoin_data(electricity_cost=0.05):
     """
-    Fetch Bitcoin data from CoinGecko, with CoinMarketCap as fallback.
+    Fetch Bitcoin data from CoinGecko, CoinMarketCap, or Kraken (in order).
     electricity_cost: Cost per kWh for mining cost estimation ($/kWh).
     Returns a dictionary with relevant metrics.
     """
     data = {}
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
-    
-    # Try CoinGecko first
+
+    # Try CoinGecko
     try:
         cg_url = "https://api.coingecko.com/api/v3/coins/bitcoin"
-        cg_response = requests.get(cg_url, headers=headers, params={'x_cg_api_key': os.getenv('COINGECKO_API_KEY', '')}).json()
+        cg_params = {'x_cg_api_key': os.getenv('COINGECKO_API_KEY', '')}
+        cg_response = requests.get(cg_url, headers=headers, params=cg_params, timeout=10).json()
         market_data = cg_response['market_data']
         
         data['current_price'] = market_data['current_price']['usd']
@@ -45,17 +46,19 @@ def fetch_bitcoin_data(electricity_cost=0.05):
         up = cg_response['sentiment_votes_up_percentage']
         down = cg_response['sentiment_votes_down_percentage']
         data['sentiment_score'] = (up - down) / 100 if up and down else 0.0
+        logging.info("Successfully fetched data from CoinGecko")
+        st.success("Fetched market data from CoinGecko")
     
     except Exception as e:
-        logging.error(f"Error fetching from CoinGecko: {str(e)}")
+        logging.error(f"CoinGecko failed: {str(e)}")
         st.warning("CoinGecko failed. Trying CoinMarketCap...")
         
-        # Fallback to CoinMarketCap
+        # Try CoinMarketCap
         try:
             cmc_url = "https://pro-api.coinmarketcap.com/v1/cryptocurrency/quotes/latest"
             cmc_params = {'symbol': 'BTC', 'convert': 'USD'}
             cmc_headers = {'X-CMC_PRO_API_KEY': os.getenv('COINMARKETCAP_API_KEY', ''), **headers}
-            cmc_response = requests.get(cmc_url, headers=cmc_headers, params=cmc_params).json()
+            cmc_response = requests.get(cmc_url, headers=cmc_headers, params=cmc_params, timeout=10).json()
             btc_data = cmc_response['data']['BTC']
             
             data['current_price'] = btc_data['quote']['USD']['price']
@@ -63,19 +66,41 @@ def fetch_bitcoin_data(electricity_cost=0.05):
             data['total_volume'] = btc_data['quote']['USD']['volume_24h']
             data['circulating_supply'] = btc_data['circulating_supply']
             data['total_supply'] = btc_data['max_supply'] or 21000000
-            data['social_volume'] = 10000  # No direct equivalent; use default
-            data['sentiment_score'] = 0.5  # No direct equivalent; use default
-            
+            data['social_volume'] = 10000  # No direct equivalent
+            data['sentiment_score'] = 0.5  # No direct equivalent
+            logging.info("Successfully fetched data from CoinMarketCap")
+            st.success("Fetched market data from CoinMarketCap")
+        
         except Exception as e:
-            logging.error(f"Error fetching from CoinMarketCap: {str(e)}")
-            st.warning("Unable to fetch market data. Using defaults.")
-            data['current_price'] = 60000.0
-            data['market_cap'] = 1.2e12
-            data['total_volume'] = 5e10
-            data['circulating_supply'] = 19700000
-            data['total_supply'] = 21000000
-            data['social_volume'] = 10000
-            data['sentiment_score'] = 0.5
+            logging.error(f"CoinMarketCap failed: {str(e)}")
+            st.warning("CoinMarketCap failed. Trying Kraken...")
+            
+            # Try Kraken
+            try:
+                kraken_url = "https://api.kraken.com/0/public/Ticker?pair=XBTUSD"
+                kraken_response = requests.get(kraken_url, headers=headers, timeout=10).json()
+                btc_data = kraken_response['result']['XXBTZUSD']
+                
+                data['current_price'] = float(btc_data['c'][0])
+                data['market_cap'] = float(btc_data['c'][0]) * 19700000  # Approximate circulating supply
+                data['total_volume'] = float(btc_data['v'][1]) * float(btc_data['c'][0])  # 24h volume
+                data['circulating_supply'] = 19700000
+                data['total_supply'] = 21000000
+                data['social_volume'] = 10000
+                data['sentiment_score'] = 0.5
+                logging.info("Successfully fetched data from Kraken")
+                st.success("Fetched market data from Kraken")
+            
+            except Exception as e:
+                logging.error(f"Kraken failed: {str(e)}")
+                st.error("Unable to fetch market data from all sources. Using defaults. Check API keys or network.")
+                data['current_price'] = 60000.0
+                data['market_cap'] = 1.2e12
+                data['total_volume'] = 5e10
+                data['circulating_supply'] = 19700000
+                data['total_supply'] = 21000000
+                data['social_volume'] = 10000
+                data['sentiment_score'] = 0.5
     
     # Blockchain.com for on-chain
     @retry(stop=stop_after_attempt(5), wait=wait_exponential(multiplier=1, min=4, max=10))
@@ -98,7 +123,7 @@ def fetch_bitcoin_data(electricity_cost=0.05):
     
     # Mining cost estimation
     def estimate_mining_cost(hash_rate, electricity_cost):
-        power_consumption = hash_rate * 1000  # Simplified
+        power_consumption = hash_rate * 1000
         return power_consumption * electricity_cost * 24 * 365 / (6.25 * 144)
     data['mining_cost'] = estimate_mining_cost(data['hash_rate'], electricity_cost)
     data['electricity_cost'] = electricity_cost
