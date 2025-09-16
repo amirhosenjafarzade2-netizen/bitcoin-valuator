@@ -1,11 +1,27 @@
-streamlit>=1.28.0
-pandas>=1.5.0
-numpy>=1.24.0
-plotly>=5.15.0
-requests>=2.28.0
-beautifulsoup4>=4.11.0
-yfinance>=0.2.18
-reportlab>=4.0.0
-python-dotenv>=1.0.0
-tenacity>=8.2.0
-fpdf>=1.7.2
+# Core dependencies for Streamlit dashboard
+streamlit==1.39.0
+pandas==2.2.3
+numpy==1.26.4
+plotly==5.24.1
+
+# Data fetching and processing
+requests==2.32.3
+aiohttp==3.10.10
+beautifulsoup4==4.12.3
+yfinance==0.2.44
+tenacity==9.0.0
+python-dotenv==1.0.1
+
+# Visualization and reporting
+matplotlib==3.9.2
+fpdf2==2.7.10
+
+# Statistical and scientific computing
+scipy==1.14.1
+
+# Caching for performance
+cachetools==5.5.0
+
+# Testing and code quality
+pytest==8.3.3
+pydocstyle==6.3.0
