@@ -1,82 +1,246 @@
 body {
-    font-family: 'Arial', sans-serif;
-    background-color: #f0f2f6;
-    color: #333;
+    font-family: 'Inter', 'Arial', sans-serif; /* Modern font, fallback to Arial */
+    background-color: #f8f9fa; /* Light gray, Bitcoin-friendly */
+    color: #111111; /* High-contrast dark text */
+    margin: 0;
+    padding: 0;
 }
 
 body.dark-mode {
-    background-color: #1a1a1a;
-    color: #f0f0f0;
+    background-color: #121212; /* Dark background, matches second program */
+    color: #f0f0f0; /* Light text for dark mode */
 }
 
+/* Responsive container for main content */
+.stApp {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 16px;
+}
+
+/* Mobile responsiveness */
+@media (max-width: 768px) {
+    .stApp {
+        padding: 8px;
+    }
+}
+
+/* Tabs styling */
 .stTabs [data-baseweb="tab-list"] {
     display: flex;
     flex-direction: row;
-    padding: 0;
-    border-radius: 10px;
-    overflow: hidden;
-    background-color: #f0f2f6;
+    padding: 4px;
+    border-radius: 8px;
+    background-color: #ffffff;
     border: 1px solid #e0e0e0;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    overflow-x: auto; /* Scrollable on mobile */
 }
 
 .stTabs [data-baseweb="tab-list"].dark-mode {
-    background-color: #333;
-    border-color: #555;
+    background-color: #1e1e1e; /* Darker background */
+    border-color: #444444;
+}
+
+@media (max-width: 768px) {
+    .stTabs [data-baseweb="tab-list"] {
+        flex-direction: column; /* Stack tabs vertically on mobile */
+        align-items: stretch;
+    }
 }
 
 .stTabs [data-baseweb="tab"] {
-    height: 40px;
+    height: 48px;
     border: none;
-    color: #d32f2f;
-    font-weight: 600;
+    color: #F7931A; /* Bitcoin orange */
+    font-weight: 500;
     flex: 1;
     display: flex;
     justify-content: center;
     align-items: center;
-    padding: 0 12px;
+    padding: 0 16px;
     white-space: nowrap;
     cursor: pointer;
-    transition: all 0.3s ease;
+    transition: all 0.2s ease-in-out; /* Smooth transitions */
     background-color: transparent;
 }
 
 .stTabs [data-baseweb="tab"].dark-mode {
-    color: #ff4d4d;
+    color: #F7931A; /* Consistent Bitcoin orange */
 }
 
 .stTabs [data-baseweb="tab"]:hover {
-    color: #b71c1c;
-    background-color: #ffebee;
+    color: #E68A00; /* Darker orange on hover */
+    background-color: #fff3e0; /* Light orange background */
+}
+
+.stTabs [data-baseweb="tab"].dark-mode:hover {
+    background-color: #2a2a2a; /* Dark hover background */
 }
 
 .stTabs [data-baseweb="tab"][aria-selected="true"] {
-    color: #d32f2f;
-    background-color: #fff;
-    box-shadow: inset 0 -2px 0 #d32f2f;
+    color: #F7931A;
+    background-color: #ffffff;
+    box-shadow: inset 0 -3px 0 #F7931A; /* Orange underline */
+    font-weight: 600;
 }
 
 .stTabs [data-baseweb="tab"][aria-selected="true"].dark-mode {
-    color: #ff4d4d;
-    background-color: #444;
-    box-shadow: inset 0 -2px 0 #ff4d4d;
+    background-color: #2a2a2a;
+    box-shadow: inset 0 -3px 0 #F7931A;
 }
 
+.stTabs [data-baseweb="tab"]:focus {
+    outline: 2px solid #F7931A;
+    outline-offset: 2px;
+}
+
+/* Button styling */
 .stButton>button {
-    background-color: #d32f2f;
-    color: white;
-    border-radius: 5px;
-    padding: 8px 16px;
+    background-color: #F7931A; /* Bitcoin orange */
+    color: #ffffff; /* High-contrast white text */
+    border: none;
+    border-radius: 6px;
+    padding: 10px 20px;
+    font-weight: 500;
+    font-size: 16px;
+    cursor: pointer;
+    transition: all 0.2s ease-in-out;
 }
 
 .stButton>button:hover {
-    background-color: #b71c1c;
+    background-color: #E68A00; /* Darker orange */
+    transform: translateY(-1px); /* Subtle lift effect */
 }
 
 .stButton>button.dark-mode {
-    background-color: #ff4d4d;
+    background-color: #F7931A;
 }
 
 .stButton>button.dark-mode:hover {
-    background-color: #cc0000;
+    background-color: #E68A00;
+}
+
+.stButton>button:focus {
+    outline: 2px solid #F7931A;
+    outline-offset: 2px;
+}
+
+.stButton>button:active {
+    transform: translateY(0); /* Reset lift on click */
+}
+
+/* Slider and Selectbox styling */
+.stSlider [data-baseweb="slider"] {
+    background-color: transparent;
+}
+
+.stSlider [data-baseweb="slider"] .MuiSlider-track {
+    background-color: #F7931A; /* Orange track */
+}
+
+.stSlider [data-baseweb="slider"] .MuiSlider-thumb {
+    background-color: #F7931A;
+    border: 2px solid #ffffff;
+}
+
+.stSlider [data-baseweb="slider"].dark-mode .MuiSlider-thumb {
+    border-color: #2a2a2a;
+}
+
+.stSelectbox [data-baseweb="select"] {
+    border-radius: 6px;
+    border: 1px solid #e0e0e0;
+    background-color: #ffffff;
+}
+
+.stSelectbox [data-baseweb="select"].dark-mode {
+    border-color: #444444;
+    background-color: #1e1e1e;
+    color: #f0f0f0;
+}
+
+.stSelectbox [data-baseweb="select"] [role="combobox"] {
+    color: #111111;
+}
+
+.stSelectbox [data-baseweb="select"].dark-mode [role="combobox"] {
+    color: #f0f0f0;
+}
+
+/* Chart container */
+.stPlotlyChart, .stAltairChart {
+    border-radius: 8px;
+    border: 1px solid #e0e0e0;
+    background-color: #ffffff;
+    padding: 8px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.stPlotlyChart.dark-mode, .stAltairChart.dark-mode {
+    border-color: #444444;
+    background-color: #1e1e1e;
+}
+
+/* Loading spinner */
+.stSpinner .spinner {
+    border: 3px solid #F7931A;
+    border-top: 3px solid transparent;
+    border-radius: 50%;
+    width: 24px;
+    height: 24px;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* Mobile sidebar (custom toggle for Streamlit sidebar) */
+.sidebar .sidebar-content {
+    transition: transform 0.3s ease-in-out;
+}
+
+@media (max-width: 768px) {
+    .sidebar .sidebar-content {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 250px;
+        height: 100%;
+        background-color: #ffffff;
+        border-right: 1px solid #e0e0e0;
+        transform: translateX(-100%);
+        z-index: 1000;
+    }
+
+    .sidebar .sidebar-content.active {
+        transform: translateX(0);
+    }
+
+    .sidebar .sidebar-content.dark-mode {
+        background-color: #1e1e1e;
+        border-color: #444444;
+    }
+
+    /* Sidebar toggle button */
+    .sidebar-toggle {
+        display: block;
+        position: fixed;
+        top: 16px;
+        left: 16px;
+        background-color: #F7931A;
+        color: #ffffff;
+        border: none;
+        border-radius: 6px;
+        padding: 8px;
+        cursor: pointer;
+        z-index: 1100;
+        transition: all 0.2s ease-in-out;
+    }
+
+    .sidebar-toggle:hover {
+        background-color: #E68A00;
+    }
 }
